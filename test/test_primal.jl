@@ -33,7 +33,7 @@ fe_u = [zero(Vec{2, Float64}) for i in 1:3]
 fe_g = [zeros(Float64, 3) for i in 1:nslip]
 
 
-fe(field) = ViscoCrystalPlast.intf_opt(field, prev_prim_field, e_coordinates, fe_values, fe_u, fe_g, dt, ele_matstats, mp)
+fe(field) = ViscoCrystalPlast.intf_primal(field, prev_prim_field, e_coordinates, fe_values, fe_u, fe_g, dt, ele_matstats, mp)
 
 prim_field = ones(12)
 f = fe(prim_field)

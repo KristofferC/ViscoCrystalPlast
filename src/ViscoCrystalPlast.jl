@@ -5,6 +5,7 @@ using JuAFEM
 using CALFEM
 using Parameters
 using ForwardDiff
+using TimerOutputs
 
 const DEBUG = true
 
@@ -26,6 +27,11 @@ else
     end
 end
 
+abstract AbstractProblem
+
+immutable DualProblem <: AbstractProblem end
+immutable PrimalProblem <: AbstractProblem end
+
 include("ComsolMeshReader.jl")
 include("material_parameters.jl")
 
@@ -35,7 +41,9 @@ include("sparse_tools.jl")
 
 
 include("utilities.jl")
+include("solve_problem.jl")
 include("primal/solve_primal.jl")
+include("dual/solve_dual.jl")
 
 
 

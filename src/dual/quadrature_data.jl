@@ -9,7 +9,7 @@ type CrystPlastDualQD{dim, T, M}
 end
 
 
-function CrystPlastDualQD{dim}(nslip, Type{Dim{dim}})
+function CrystPlastDualQD{dim}(nslip, ::Type{Dim{dim}})
     σ = zero(SymmetricTensor{2, dim})
     ε = zero(SymmetricTensor{2, dim})
     ε_p = zero(SymmetricTensor{2, dim})
@@ -17,5 +17,5 @@ function CrystPlastDualQD{dim}(nslip, Type{Dim{dim}})
     τ = zeros(nslip)
     γ = zeros(nslip)
     χ = zeros(nslip)
-    return CrystPlastMS(σ, ε, ε_p, τ_di, τ, γ, χ)
+    return CrystPlastDualQD(σ, ε, ε_p, τ_di, τ, γ, χ)
 end

@@ -42,3 +42,13 @@ end
 function get_freefixed(dofs::Dofs, bc::DirichletBoundaryConditions)
     return setdiff(dofs.dof_ids, d_pres) # free dofs
 end
+
+function update_bcs!(mesh::GeometryMesh, dofs::Dofs, bc::DirichletBoundaryConditions, time::Float64, f)
+    dofs_per_node = length(dofs.dof_types)
+    for i in eachindex(bc.dof_ids)
+        dof_type = bc.dof_types[i]
+        dof_id = bc.dof_ids[i]
+        node = div(dof_id + dofs_per_node -1, dofs_per_node)
+        ViscoCrystalPlast.set_value(bc, f(dof_type, mesh.coords[:, node], time), i)
+    end
+end

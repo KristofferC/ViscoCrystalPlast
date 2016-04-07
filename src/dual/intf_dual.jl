@@ -4,20 +4,20 @@ using JuAFEM
 using NLsolve
 
 
-nslip = 2
 macro implement_jacobian(f, jacf)
     cachesym = esc(gensym("cache"))
+    GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
+    result = ForwardDiff.build_workvec(GG, 6)
     return quote
-        const $(cachesym) = ForwardDiff.JacobianCache(Val{6}, Val{6}, 2*nslip, Float64)
         function $(esc(f)){G<:ForwardDiff.GradientNumber}(x::Vector{G})
             x_val = ForwardDiff.get_value(x)
             f_val, J = $(f)(x_val), $(jacf)(x_val)
             J_new = J * ForwardDiff.get_jacobian(x)
-            result = ForwardDiff.get_workvec($(cachesym))
+
             for i in eachindex(f_val)
-                result[i] = G(f_val[i], getrowpartials(G, J_new, i))
+                $result[i] = G(f_val[i], getrowpartials(G, J_new, i))
             end
-            return result
+            return $result
         end
     end
 end
@@ -28,13 +28,9 @@ end
 
 ################################################
 
-
-
-
-function intf_opt{dim, T, Q, MS <: CrystPlastMS}(a::Vector{T}, x::AbstractArray{Q}, fev::FEValues{dim}, dt,
+function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractArray{Q}, x::AbstractArray{Q}, fev::FEValues{dim}, fe_u, fe_g, dt,
                              mss::AbstractVector{MS}, temp_mss::AbstractVector{MS}, mp::CrystPlastMP)
     @unpack mp: s, m, H⟂, Ee, sxm_sym, l
-
     nslip = length(sxm_sym)
 
     ndim = 2
@@ -46,8 +42,12 @@ function intf_opt{dim, T, Q, MS <: CrystPlastMS}(a::Vector{T}, x::AbstractArray{
     x_vec = reinterpret(Vec{2, Q}, x, (n_basefuncs,))
     reinit!(fev, x_vec)
 
-    fe_u = [zero(Vec{2, T}) for i in 1:n_basefuncs]
-    fe_g = [[zero(T) for i in 1:n_basefuncs] for α in 1:nslip]
+
+    fill!(fe_u, zero(Vec{dim, T}))
+    for fe_g_alpha in fe_g
+        fill!(fe_g_alpha, zero(T))
+    end
+
     χ = [zero(T) for i in 1:nslip]
     ξα = [zero(Vec{2, T}) for i in 1:n_basefuncs]
 
@@ -79,6 +79,7 @@ function intf_opt{dim, T, Q, MS <: CrystPlastMS}(a::Vector{T}, x::AbstractArray{
         ms = mss[q_point]
         temp_ms = temp_mss[q_point]
         X = _stress!(Y)
+
         γ = X[1:nslip]
         τ_di = X[nslip+1:end]
 
@@ -90,6 +91,7 @@ function intf_opt{dim, T, Q, MS <: CrystPlastMS}(a::Vector{T}, x::AbstractArray{
 
         ε_e = ε - ε_p
         σ = mp.Ee * ε_e
+
 
         if T == Float64
             temp_ms.σ  = σ
@@ -143,12 +145,13 @@ function stress!{T}(Y::Vector{T}, ∆t, mp, ms, temp_ms)
         x0[α+nslip] = ms.τ_di[α]
     end
 
-    J = jacobian(R!, output_length = length(x0), cache=CONT_CACHE)
+    J = jacobian(R!, output_length = length(x0))
 
     r = ones(2*nslip)
 
     max_iters = 40
     n_iters = 1
+
 
     while norm(r, Inf) >= 1e-7
          compute_residual!(r, x0, Y, ∆t, mp, ms)
@@ -161,14 +164,12 @@ function stress!{T}(Y::Vector{T}, ∆t, mp, ms, temp_ms)
 
     γ = x0[1:nslip]
     τ_di = x0[nslip+1:end]
-
-
     return x0
 end
 
 function compute_stress(ε, γ, sxm_sym, Ee)
     ε_p = zero(ε)
-    for α in 1:nslip
+    for α in 1:length(γ)
         ε_p += γ[α] * sxm_sym[α]
     end
 
@@ -195,13 +196,9 @@ function compute_residual!(r, X, Y, Δt, mp, ms)
     return
 end
 
-nslip = 2
-const CONT_CACHE = ForwardDiff.JacobianCache(Val{2*nslip}, Val{2*nslip}, 2*nslip, Float64)
-const EPS_CACHE = ForwardDiff.JacobianCache(Val{4 + nslip}, Val{4 + nslip}, 2*nslip, Float64)
-
 
 function consistent_tangent(Y, ∆t, matpar, temp_matstat)
-
+    nslip = length(matpar.angles)
     X = zeros(2*nslip)
     for α in 1:nslip
         X[α] = temp_matstat.γ[α]
@@ -209,10 +206,10 @@ function consistent_tangent(Y, ∆t, matpar, temp_matstat)
     end
 
     RY!(fx, x) = compute_residual!(fx, x, Y, ∆t, matpar, temp_matstat)
-    drdX = jacobian(RY!, output_length = length(X), cache=CONT_CACHE)
+    drdX = jacobian(RY!, output_length = length(X))
 
     RX!(fx, y) = compute_residual!(fx, X, y, ∆t, matpar, temp_matstat)
-    drdY = jacobian(RX!, output_length = length(X), cache=EPS_CACHE)
+    drdY = jacobian(RX!, output_length = length(X))
 
     dXdY = -drdX(X) \ drdY(Y)
 

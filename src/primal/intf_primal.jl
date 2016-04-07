@@ -1,5 +1,5 @@
-function intf_opt{dim, func_space, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g,
-                             dt, mss::AbstractVector, mp::CrystPlastMP)
+function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g,
+                            dt, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP)
 
 
     @unpack mp: s, m, l, H⟂, Ho, Ee, sxm_sym
@@ -18,11 +18,9 @@ function intf_opt{dim, func_space, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{
 
 
     fill!(fe_u, zero(Vec{dim, T}))
-    for fe_g_alpha  in fe_g
+    for fe_g_alpha in fe_g
         fill!(fe_g_alpha, zero(T))
     end
-
-
 
     ud = u_dofs(dim, nnodes, ngradvars, nslip)
     a_u = a[ud]
@@ -35,7 +33,7 @@ function intf_opt{dim, func_space, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{
         γs_prev[α] = a_prev[gd]
     end
 
-    H_g = [H⟂ * s[α] ⊗ s[α] + Ho * l[α] ⊗ l[α] for α in 1:nslip]
+    #H_g = [H⟂ * s[α] ⊗ s[α] + Ho * l[α] ⊗ l[α] for α in 1:nslip]
 
     for q_point in 1:length(points(get_quadrule(fev)))
         ε = function_vector_symmetric_gradient(fev, q_point, u_vec)
@@ -67,7 +65,7 @@ function intf_opt{dim, func_space, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{
             τ_en = -(σ ⊡ sxm_sym[α])
 
             g = function_scalar_gradient(fev, q_point, γs[α])
-            ξ = mp.lα^2 * H_g[α] * g
+            ξ = mp.lα^2 * mp.Hgrad[α] * g
             for i in 1:n_basefuncs
                 fe_g[α][i] += (shape_value(fev, q_point, i) * (τα + τ_en) +
                                shape_gradient(fev, q_point, i) ⋅ ξ) * detJdV(fev, q_point)

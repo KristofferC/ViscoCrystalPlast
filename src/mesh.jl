@@ -70,3 +70,14 @@ function add_dofs(mesh::GeometryMesh, fields::Vector{Symbol})
     dofs = reshape(collect(1:dofs_per_node*n_nodes), (dofs_per_node, n_nodes))
     return Dofs(dofs, fields)
 end
+
+function node_neighboring_elements(mesh)
+    neighboring_elements = [Set{Int}() for i in 1:size(mesh.coords, 2)]
+
+    for e in 1:size(mesh.topology, 2)
+        for node in mesh.topology[:, e]
+            push!(neighboring_elements[node], e)
+        end
+    end
+    return neighboring_elements
+end
