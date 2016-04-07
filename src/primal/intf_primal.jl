@@ -1,33 +1,7 @@
-using Parameters
-using JuAFEM
-using ContMechTensors
-
-if !isdefined(:CrystPlastMS)
-    @eval begin
-        type CrystPlastMS{dim, T, M}
-            σ::SymmetricTensor{2, dim, T, M}
-            ε::SymmetricTensor{2, dim, T, M}
-            ε_p::SymmetricTensor{2, dim, T, M}
-            τ_di::Vector{T}
-            τ::Vector{T}
-            g::Vector{Vec{dim, T}}
-        end
-    end
-end
+function intf_opt{dim, func_space, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g,
+                             dt, mss::AbstractVector, mp::CrystPlastMP)
 
 
-function CrystPlastMS(nslip, dim)
-    σ = zero(SymmetricTensor{2, dim})
-    ε = zero(SymmetricTensor{2, dim})
-    ε_p = zero(SymmetricTensor{2, dim})
-    τ_di = zeros(nslip)
-    τ = zeros(nslip)
-    g = Vec{dim, Float64}[zero(Vec{dim, Float64}) for i in 1:nslip]
-    return CrystPlastMS(σ, ε, ε_p, τ_di, τ, g)
-end
-
-
-function intf_opt{dim, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim}, dt, mss::AbstractVector{CrystPlastMS}, mp::CrystPlastMP)
     @unpack mp: s, m, l, H⟂, Ho, Ee, sxm_sym
     nslip = length(sxm_sym)
 
@@ -42,11 +16,13 @@ function intf_opt{dim, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEV
     x_vec = reinterpret(Vec{dim, Q}, x, (n_basefuncs,))
     reinit!(fev, x_vec)
 
-    fe_u = [zero(Vec{dim, T}) for i in 1:n_basefuncs]
-    fe_g = [zeros(T, n_basefuncs)  for i in 1:ngradvars*nslip]
+
+    fill!(fe_u, zero(Vec{dim, T}))
+    for fe_g_alpha  in fe_g
+        fill!(fe_g_alpha, zero(T))
+    end
 
 
-    q_rule = get_quadrule(fev)
 
     ud = u_dofs(dim, nnodes, ngradvars, nslip)
     a_u = a[ud]
@@ -61,7 +37,7 @@ function intf_opt{dim, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEV
 
     H_g = [H⟂ * s[α] ⊗ s[α] + Ho * l[α] ⊗ l[α] for α in 1:nslip]
 
-    for q_point in 1:length(JuAFEM.points(q_rule))
+    for q_point in 1:length(points(get_quadrule(fev)))
         ε = function_vector_symmetric_gradient(fev, q_point, u_vec)
         ε_p = zero(SymmetricTensor{2, dim, T})
 
@@ -114,6 +90,7 @@ function intf_opt{dim, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEV
     end
 
     return fe
+
 end
 
 function compute_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
@@ -122,3 +99,4 @@ function compute_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
     τ = C * (tstar / ∆t * abs(Δγ))^(1/n)
     return sign(Δγ) * τ
 end
+
