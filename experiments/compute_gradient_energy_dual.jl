@@ -22,8 +22,9 @@ end
 
 function startit()
     reset_timer!()
-    #mesh = ViscoCrystalPlast.create_mesh("../test/test_mesh.mphtxt")
-    mesh = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/test_mesh.mphtxt")
+    mesh = ViscoCrystalPlast.create_mesh("../test/test_mesh.mphtxt")
+   # mesh = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/3d_cube.mphtxt")
+ #  mesh = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/test_mesh.mphtxt")
     mp = setup_material(Dim{2})
 
     dofs = ViscoCrystalPlast.add_dofs(mesh, [:u, :v, :ξ⟂1, :ξ⟂2])
@@ -35,7 +36,7 @@ function startit()
     fe_values = FEValues(Float64, q_rule, function_space)
 
     times = linspace(0.0, 1.0, 4)
-    ViscoCrystalPlast.solve_problem(ViscoCrystalPlast.DualProblem(), mesh, dofs, bcs, fe_values, mp, times, boundary_f)
+    ViscoCrystalPlast.solve_problem(ViscoCrystalPlast.DualProblem(), mesh, dofs, bcs, fe_values, mp, times, boundary_f, (i)->i)
     print_timer()
 end
 

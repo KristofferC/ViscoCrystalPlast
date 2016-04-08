@@ -11,17 +11,6 @@ import ViscoCrystalPlast: GeometryMesh, Dofs, DirichletBoundaryConditions
 import ViscoCrystalPlast: create_mesh, add_dofs, dofs_element, element_coordinates!
 import ViscoCrystalPlast: assemble!, create_sparsity_pattern
 
-# f(x) -> v
-function update_bcs!(mesh::GeometryMesh, dofs::Dofs, bc::DirichletBoundaryConditions, time::Float64, f)
-    dofs_per_node = length(dofs.dof_types)
-    for i in eachindex(bc.dof_ids)
-        dof_type = bc.dof_types[i]
-        dof_id = bc.dof_ids[i]
-        node = div(dof_id + dofs_per_node -1, dofs_per_node)
-        ViscoCrystalPlast.set_value(bc, f(dof_type, mesh.coords[:, node], time), i)
-    end
-end
-
 function boundary_f(field::Symbol, x, t::Float64)
     if field == :u
         return 0.02 * x[2] * t
@@ -62,6 +51,26 @@ function get_stiffness{dim}(E, ν, ::Type{Dim{dim}})
     δ(i,j) = i == j ? 1.0 : 0.0
     f(i,j,k,l) = λ*δ(i,j)*δ(k,l) + μ*(δ(i,k)*δ(j,l) + δ(i,l) * δ(j,k))
     Ee = SymmetricTensor{4, dim}(f)
+end
+
+immutable NewtonProblem
+    K::SparseMatrixCSC{Float64, Int}
+    f_full::Vector{Float64}
+    f_cond::Vector{Float64}
+    x::Vector{Float64}
+    prev_x::Vector{Float64}
+    trial_x::Vector{Float64}
+    ∆x::Vector{Float64}
+end
+
+function NewtonProblem(K::SparseMatrixCSC, n_full, n_free)
+    ∆x = 0.0001 * ones(n_free)
+    x = zeros(n_full)
+    prev_x = copy(x)
+    trial_x = copy(x)
+    f_full = copy(x)
+    f_cond = zeros(∆x)
+    NewtonProblem(K, f_full, f_cond, x, prev_x, trial_x, ∆x)
 end
 
 

@@ -1,10 +1,12 @@
+
+
+
 function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g,
                             dt, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP)
 
 
     @unpack mp: s, m, l, H⟂, Ho, Ee, sxm_sym
     nslip = length(sxm_sym)
-
 
     ngradvars = 1
     n_basefuncs = n_basefunctions(get_functionspace(fev))
@@ -15,7 +17,6 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_p
 
     x_vec = reinterpret(Vec{dim, Q}, x, (n_basefuncs,))
     reinit!(fev, x_vec)
-
 
     fill!(fe_u, zero(Vec{dim, T}))
     for fe_g_alpha in fe_g
@@ -32,8 +33,6 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_p
         γs[α] = a[gd]
         γs_prev[α] = a_prev[gd]
     end
-
-    #H_g = [H⟂ * s[α] ⊗ s[α] + Ho * l[α] ⊗ l[α] for α in 1:nslip]
 
     for q_point in 1:length(points(get_quadrule(fev)))
         ε = function_vector_symmetric_gradient(fev, q_point, u_vec)

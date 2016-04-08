@@ -52,3 +52,5 @@ function update_bcs!(mesh::GeometryMesh, dofs::Dofs, bc::DirichletBoundaryCondit
         ViscoCrystalPlast.set_value(bc, f(dof_type, mesh.coords[:, node], time), i)
     end
 end
+
+apply!(v::Vector, bc::DirichletBoundaryConditions) = v[bc.dof_ids] = bc.values

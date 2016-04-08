@@ -32,13 +32,16 @@ abstract AbstractProblem
 immutable DualProblem <: AbstractProblem end
 immutable PrimalProblem <: AbstractProblem end
 
+import ForwardDiff.GradientNumber
+
 include("ComsolMeshReader.jl")
 include("material_parameters.jl")
+include("newton_problem.jl")
 
 include("mesh.jl")
 include("boundary_conditions.jl")
 include("sparse_tools.jl")
-
+include("quadrature_data.jl")
 
 include("utilities.jl")
 include("solve_problem.jl")
