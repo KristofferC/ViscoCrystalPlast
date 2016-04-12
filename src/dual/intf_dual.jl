@@ -5,9 +5,8 @@ using NLsolve
 
 
 macro implement_jacobian(f, jacf)
-    cachesym = esc(gensym("cache"))
-    GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
-    result = ForwardDiff.build_workvec(GG, 6)
+    const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
+    const result = ForwardDiff.build_workvec(GG, 6)
     return quote
         function $(esc(f)){G<:ForwardDiff.GradientNumber}(x::Vector{G})
             x_val = ForwardDiff.get_value(x)
@@ -134,6 +133,7 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
 end
 
 
+const dummycache = ForwardDiffCache()
 
 function stress!{T}(Y::Vector{T}, ∆t, mp, ms, temp_ms)
     R!(r, x) = compute_residual!(r, x, Y, ∆t, mp, ms)
@@ -145,9 +145,10 @@ function stress!{T}(Y::Vector{T}, ∆t, mp, ms, temp_ms)
         x0[α+nslip] = ms.τ_di[α]
     end
 
-    J = jacobian(R!, output_length = length(x0))
+    J = jacobian(R!, output_length = length(x0), cache=dummycache)
 
     r = ones(2*nslip)
+    jbuf = zeros(2*nslip, 2*nslip)
 
     max_iters = 40
     n_iters = 1
@@ -155,7 +156,9 @@ function stress!{T}(Y::Vector{T}, ∆t, mp, ms, temp_ms)
 
     while norm(r, Inf) >= 1e-7
          compute_residual!(r, x0, Y, ∆t, mp, ms)
-         x0 -= J(x0) \ r
+         compute_jacobian!(jbuf, x0, Y, ∆t, mp, ms)
+
+         x0 -= jbuf\ r
          if n_iters == max_iters
             error("Non conv mat")
         end
@@ -178,6 +181,8 @@ function compute_stress(ε, γ, sxm_sym, Ee)
     return σ
 end
 
+
+
 function compute_residual!(r, X, Y, Δt, mp, ms)
     nslip = length(mp.angles)
     ε = convert(SymmetricTensor, Tensor{2, 2}(Y[1:4]))
@@ -196,22 +201,42 @@ function compute_residual!(r, X, Y, Δt, mp, ms)
     return
 end
 
+function compute_jacobian!(J, X, Y, Δt, mp, ms)
+    fill!(J, 0.0)
+    nslip = length(mp.angles)
+
+    @inbounds for α in 1:nslip
+        for β in 1:nslip
+            J[α, β] = mp.Dαβ[α, β]
+        end
+
+        τ_di = X[nslip+α]
+
+        J[α, nslip + α] = 1.0
+        J[nslip + α, α] = 1.0
+        J[nslip + α, nslip + α] = - Δt / mp.tstar * mp.n / mp.C * (abs(τ_di) / mp.C )^(mp.n-1)
+    end
+end
+
 
 function consistent_tangent(Y, ∆t, matpar, temp_matstat)
     nslip = length(matpar.angles)
     X = zeros(2*nslip)
+    drdX = zeros(2*nslip, 2*nslip)
+    drdY = zeros(2*nslip, 4 + nslip)
     for α in 1:nslip
         X[α] = temp_matstat.γ[α]
         X[α+nslip] = temp_matstat.τ_di[α]
     end
 
-    RY!(fx, x) = compute_residual!(fx, x, Y, ∆t, matpar, temp_matstat)
-    drdX = jacobian(RY!, output_length = length(X))
+    for α in 1:nslip
+        drdY[α, 1:length(matpar.Esm[α])] = -matpar.Esm[α]
+        drdY[α, α + length(matpar.Esm[α])] = -1.0
+    end
 
-    RX!(fx, y) = compute_residual!(fx, X, y, ∆t, matpar, temp_matstat)
-    drdY = jacobian(RX!, output_length = length(X))
+    compute_jacobian!(drdX, X, Y, ∆t, matpar, temp_matstat)
 
-    dXdY = -drdX(X) \ drdY(Y)
+    dXdY = - inv(drdX) * drdY
 
     return dXdY
 end

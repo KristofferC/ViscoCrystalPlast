@@ -1,6 +1,3 @@
-
-
-
 function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g,
                             dt, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP)
 
@@ -51,9 +48,9 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_p
         end
 
         if T == Float64
-            mss[q_point].σ  = σ
-            mss[q_point].ε  = ε
-            mss[q_point].ε_p = ε_p
+            temp_mss[q_point].σ  = σ
+            temp_mss[q_point].ε  = ε
+            temp_mss[q_point].ε_p = ε_p
         end
 
         for α in 1:nslip
@@ -71,9 +68,10 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_p
             end
 
             if T == Float64
-                mss[q_point].g[α] = g
-                mss[q_point].τ_di[α] = τα
-                mss[q_point].τ[α] = -τ_en
+                temp_mss[q_point].ξ⟂[α] = g ⋅ mp.s[α] * mp.lα^2 * mp.H⟂
+                temp_mss[q_point].ξo[α] = g ⋅ mp.l[α] * mp.lα^2 * mp.Ho
+                temp_mss[q_point].τ_di[α] = τα
+                temp_mss[q_point].τ[α] = -τ_en
             end
         end
     end

@@ -8,7 +8,6 @@ type CrystPlastDualQD{dim, T, M}
     χ::Vector{T}
 end
 
-
 function CrystPlastDualQD{dim}(nslip, ::Type{Dim{dim}})
     σ = zero(SymmetricTensor{2, dim})
     ε = zero(SymmetricTensor{2, dim})
@@ -18,4 +17,11 @@ function CrystPlastDualQD{dim}(nslip, ::Type{Dim{dim}})
     γ = zeros(nslip)
     χ = zeros(nslip)
     return CrystPlastDualQD(σ, ε, ε_p, τ_di, τ, γ, χ)
+end
+
+function create_quadrature_data{dim}(::DualProblem, ::Type{Dim{dim}}, quad_rule, nslip, n_elements)
+    n_qpoints = length(points(quad_rule))
+    mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:n_elements]
+    temp_mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:n_elements]
+    QuadratureData(mss, temp_mss)
 end
