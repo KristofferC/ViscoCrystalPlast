@@ -42,7 +42,7 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_p
         end
 
         ε_e = ε - ε_p
-        σ = Ee * ε_e
+        σ = Ee ⊡ ε_e
         for i in 1:n_basefuncs
             fe_u[i] +=  σ ⋅ shape_gradient(fev, q_point, i) * detJdV(fev, q_point)
         end
@@ -61,7 +61,7 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_p
             τ_en = -(σ ⊡ sxm_sym[α])
 
             g = function_scalar_gradient(fev, q_point, γs[α])
-            ξ = mp.lα^2 * mp.Hgrad[α] * g
+            ξ = mp.lα^2 * mp.Hgrad[α] ⋅ g
             for i in 1:n_basefuncs
                 fe_g[α][i] += (shape_value(fev, q_point, i) * (τα + τ_en) +
                                shape_gradient(fev, q_point, i) ⋅ ξ) * detJdV(fev, q_point)

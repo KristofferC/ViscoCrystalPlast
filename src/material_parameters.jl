@@ -43,8 +43,8 @@ function CrystPlastMP{T, dim}(::Type{Dim{dim}}, E::T, ν::T, n::T, H⟂::T, Ho::
 
     sxm_sym = [convert(SymmetricTensor{2, dim}, s[α] ⊗ m[α]) for α in 1:nslip]
     Hgrad = [convert(SymmetricTensor{2, dim}, H⟂ * s[α] ⊗ s[α] + Ho * l[α] ⊗ l[α]) for α in 1:nslip]
-    Dαβ = T[Ee * sxm_sym[α] ⊡ sxm_sym[β] for α in 1:nslip, β in 1:nslip]
-    Esm = typeof(Ee * sxm_sym[1])[Ee * sxm_sym[α] for α in 1:nslip]
+    Dαβ = T[(Ee ⊡ sxm_sym[α]) ⊡ sxm_sym[β] for α in 1:nslip, β in 1:nslip]
+    Esm = typeof(Ee ⊡ sxm_sym[1])[Ee ⊡ sxm_sym[α] for α in 1:nslip]
 
     CrystPlastMP(E, Ee, ν, n, H⟂, Ho, Hgrad, lα, tstar, C, angles, sxm_sym, Dαβ, Esm, s, m, l)
 end

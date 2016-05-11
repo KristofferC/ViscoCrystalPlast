@@ -1,4 +1,4 @@
-type CrystPlastDualQD{dim, T, M}
+type CrystPlastDualQD{dim, T, M} <: QuadratureData
     σ::SymmetricTensor{2, dim, T, M}
     ε::SymmetricTensor{2, dim, T, M}
     ε_p::SymmetricTensor{2, dim, T, M}
@@ -18,6 +18,31 @@ function CrystPlastDualQD{dim}(nslip, ::Type{Dim{dim}})
     χ = zeros(nslip)
     return CrystPlastDualQD(σ, ε, ε_p, τ_di, τ, γ, χ)
 end
+
+get_type{dim, T, M}(::Type{CrystPlastDualQD{dim, T, M}}) = CrystPlastDualQD
+
+function Base.(:*)(n::Number, qd::CrystPlastDualQD)
+    CrystPlastDualQD(n * qd.σ, n * qd.ε, n * qd.ε_p, n * qd.τ_di, n * qd.τ, n * qd.γ, n * qd.χ)
+end
+
+Base.(:*)(qd::CrystPlastDualQD, n::Number) = n * qd
+
+function Base.(:/)(qd::CrystPlastDualQD, n::Number)
+    CrystPlastDualQD(qd.σ / n, qd.ε / n, qd.ε_p / n, qd.τ_di / n, qd.τ / n, qd.γ / n, qd.χ / n)
+end
+
+function Base.(:-)(qd1::CrystPlastDualQD, qd2::CrystPlastDualQD)
+    CrystPlastDualQD(qd1.σ - qd2.σ, qd1.ε - qd2.ε, qd1.ε_p - qd2.ε_p, qd1.τ_di - qd2.τ_di, qd1.τ - qd2.τ, qd1.γ - qd2.γ, qd1.χ - qd2.χ)
+end
+
+function Base.(:.*)(qd1::CrystPlastDualQD, qd2::CrystPlastDualQD)
+    CrystPlastDualQD(qd1.σ .* qd2.σ, qd1.ε .* qd2.ε, qd1.ε_p .* qd2.ε_p, qd1.τ_di .* qd2.τ_di, qd1.τ .* qd2.τ, qd1.γ .* qd2.γ, qd1.χ .* qd2.χ)
+end
+
+function Base.(:+)(qd1::CrystPlastDualQD, qd2::CrystPlastDualQD)
+    CrystPlastDualQD(qd1.σ + qd2.σ, qd1.ε + qd2.ε, qd1.ε_p + qd2.ε_p, qd1.τ_di + qd2.τ_di, qd1.τ + qd2.τ, qd1.γ + qd2.γ, qd1.χ + qd2.χ)
+end
+
 
 function create_quadrature_data{dim}(::DualProblem, ::Type{Dim{dim}}, quad_rule, nslip, n_elements)
     n_qpoints = length(points(quad_rule))

@@ -6,6 +6,8 @@ using CALFEM
 using Parameters
 using ForwardDiff
 using TimerOutputs
+using NearestNeighbors
+using GeometricalPredicates
 
 const DEBUG = true
 
@@ -34,19 +36,27 @@ immutable PrimalProblem <: AbstractProblem end
 
 import ForwardDiff.GradientNumber
 
+abstract QuadratureData
+
 include("ComsolMeshReader.jl")
 include("material_parameters.jl")
-include("newton_problem.jl")
+#include("newton_problem.jl")
 
 include("mesh.jl")
 include("boundary_conditions.jl")
 include("sparse_tools.jl")
-include("quadrature_data.jl")
+include("mesh_transfer.jl")
 
 include("utilities.jl")
 include("solve_problem.jl")
-include("primal/solve_primal.jl")
-include("dual/solve_dual.jl")
+
+
+include("primal/quadrature_data.jl")
+include("primal/intf_primal.jl")
+
+include("dual/quadrature_data.jl")
+include("dual/intf_dual.jl")
+
 
 
 

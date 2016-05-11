@@ -89,7 +89,7 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
         end
 
         ε_e = ε - ε_p
-        σ = mp.Ee * ε_e
+        σ = mp.Ee ⊡ ε_e
 
 
         if T == Float64
@@ -105,11 +105,9 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
         end
 
         for i in 1:n_basefuncs
-            ϕ = shape_value(fev, q_point, i)
             ∇ϕ = shape_gradient(fev, q_point, i)
             fe_u[i] += σ ⋅ ∇ϕ * detJdV(fev, q_point)
         end
-
 
         for α in 1:nslip
             ξ⟂_gp = function_scalar_value(fev, q_point, ξ⟂_nodes[α])
@@ -177,7 +175,7 @@ function compute_stress(ε, γ, sxm_sym, Ee)
     end
 
     ε_e = ε - ε_p
-    σ = Ee * ε_e
+    σ = Ee ⊡ ε_e
     return σ
 end
 

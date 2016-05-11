@@ -41,10 +41,10 @@ function solve_problem{dim}(problem::AbstractProblem, mesh, dofs, bcs, fe_values
         while iter == 1 || norm(f, Inf)  >= 1e-6
 
             test_field[free] = primary_field[free] + ∆u
-            @timer "total K" K_condensed, f = assemble!(K, test_field, prev_primary_field, fe_values,
+            K_condensed, f = assemble!(K, test_field, prev_primary_field, fe_values,
                                                             mesh, dofs, bcs, mp, mss, temp_mss, dt, Val{dofs_per_element})
-            @timer "factorization"  ∆u -=  K_condensed \ f
-            println(norm(f))
+            ∆u -=  K_condensed \ f
+           # println(norm(f))
             iter += 1
             #@timer "factorization" ∆u -=  cholfact(Symmetric(K_condensed, :U)) \ f
         end
@@ -56,7 +56,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh, dofs, bcs, fe_values
         mss, temp_mss = temp_mss, mss
         exporter(t, primary_field, mss)
     end
-
+    return primary_field, mss
 end
 
 function assemble!{dim, dofs_per_element}(K::SparseMatrixCSC, primary_field::Vector, prev_primary_field::Vector,
@@ -103,10 +103,10 @@ function assemble!{dim, dofs_per_element}(K::SparseMatrixCSC, primary_field::Vec
         fe = intf(primary_element_field, prev_primary_element_field, e_coordinates,
                   fe_values, fe_uF64, fe_gF64, dt, ele_matstats, temp_matstats, mp)
 
-        @timer "call Ke" _, allresults = Ke!(K_element, primary_element_field)
+        _, allresults = Ke!(K_element, primary_element_field)
 
         assemble!(f_int, fe, edof)
-        @timer "assemble_stiffness" assemble!(K, K_element, edof)
+        assemble!(K, K_element, edof)
 
     end
 
