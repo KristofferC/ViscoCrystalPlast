@@ -23,6 +23,10 @@ end
 
 function create_mesh(mesh_file::AbstractString)
     mesh = ComsolMeshReader.read_mphtxt(mesh_file)
+    modify_mesh(mesh)
+end
+
+function modify_mesh(mesh)
     dim = mesh.space_dim
     coordinates = mesh.coordinates
     n_nodes = length(coordinates)
@@ -39,6 +43,7 @@ function create_mesh(mesh_file::AbstractString)
     end
 
     boundary_nodes = unique(reinterpret(Int, boundary_elements, (dim*length(boundary_elements),)))
+    print(typeof(coordinates))
     coords_mat = reinterpret(Float64, coordinates, (dim, length(coordinates)))
 
     mesh = GeometryMesh(coords_mat, topology, boundary_nodes)

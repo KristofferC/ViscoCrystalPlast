@@ -26,13 +26,14 @@ end
 
 
 function startit()
-    reset_timer!()
 
-    df = DataFrame(n_elements = Int[], l = Float64[], tot_slip = Float64[], tot_grad_energy = Float64[], err_slip = Float64[], err_grad_energy = Float64[])
 
-    df_l_study = DataFrame(l = Float64[], tot_slip = Float64[], tot_grad_energy = Float64[])
+    df = DataFrame(n_elements = Int[], l = Float64[], tot_slip = Float64[], tot_grad_energy = Float64[], tot_elastic_energy = Float64[],
+                     err_slip = Float64[], err_grad_energy = Float64[], err_elastic_energy = Float64[])
 
-    for l in 0.5
+    df_l_study = DataFrame(l = Float64[], tot_slip = Float64[], tot_grad_energy = Float64[], tot_elast_en = Float64[])
+
+    for l in 0.1:0.1:3.0
         mp = setup_material(Dim{2}, l)
 
         function_space = Lagrange{2, RefTetrahedron, 1}()
@@ -53,21 +54,21 @@ function startit()
         begin
             timestep_fine += 1
             mss_nodes = move_quadrature_data_to_nodes(mss, mesh_fine, quad_rule)
-            output(pvd_fine, time, timestep_fine, "shear_primal_fine", mesh_fine, dofs_fine, u, mss_nodes, quad_rule, mp)
+            #output(pvd_fine, time, timestep_fine, "shear_primal_fine", mesh_fine, dofs_fine, u, mss_nodes, quad_rule, mp)
         end
 
         sol_fine, mss_fine = ViscoCrystalPlast.solve_problem(ViscoCrystalPlast.PrimalProblem(), mesh_fine, dofs_fine, bcs_fine, fe_values, mp, times,
                                         boundary_f_primal, exporter_fine)
         vtk_save(pvd_fine)
 
-        tot_slip, tot_grad_en = total_slip(mesh_fine, dofs_fine, sol_fine, mss_fine, fe_values, 2, mp)
-        push!(df_l_study, [l, tot_slip, tot_grad_en])
+        tot_slip, tot_grad_en, tot_elastic_en = total_slip(mesh_fine, dofs_fine, sol_fine, mss_fine, fe_values, 2, mp)
+        push!(df_l_study, [l tot_slip tot_grad_en tot_elastic_en])
 
         ###############################
         # Solve coarse scale problems #
         ###############################
-
-        for i in 2
+        #=
+        for i in 1:5
             mesh_coarse = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/test_mesh_$i.mphtxt")
             dofs_coarse = ViscoCrystalPlast.add_dofs(mesh_coarse, [:u, :v, :γ1, :γ2])
             bcs_coarse = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_coarse, mesh_coarse.boundary_nodes, [:u, :v, :γ1, :γ2])
@@ -77,7 +78,7 @@ function startit()
             begin
                timestep_coarse += 1
                mss_nodes = move_quadrature_data_to_nodes(mss, mesh_coarse, quad_rule)
-               output(pvd_coarse, time, timestep_coarse, "shear_primal_coarse", mesh_coarse, dofs_coarse, u, mss_nodes, quad_rule, mp)
+               #output(pvd_coarse, time, timestep_coarse, "shear_primal_coarse", mesh_coarse, dofs_coarse, u, mss_nodes, quad_rule, mp)
             end
 
             sol_coarse, mss_coarse = ViscoCrystalPlast.solve_problem(ViscoCrystalPlast.PrimalProblem(), mesh_coarse, dofs_coarse, bcs_coarse, fe_values, mp, times,
@@ -100,21 +101,20 @@ function startit()
             end
             mss_diff_nodes = move_quadrature_data_to_nodes(mss_diff, mesh_fine, quad_rule)
 
-            output(pvd_diff, 1.0, 1, "shear_primal_diff", mesh_fine, dofs_fine, sol_diff, mss_diff_nodes, quad_rule, mp)
+            #output(pvd_diff, 1.0, 1, "shear_primal_diff", mesh_fine, dofs_fine, sol_diff, mss_diff_nodes, quad_rule, mp)
             vtk_save(pvd_diff)
 
-            tot_slip, tot_grad_en = total_slip(mesh_coarse, dofs_coarse, sol_coarse, mss_coarse, fe_values, 2, mp)
-            err_tot_slip, err_tot_grad_en = total_slip(mesh_fine, dofs_fine, sol_diff, mss_diff, fe_values, 2, mp)
-            push!(df, [size(mesh_coarse.topology, 2) l tot_slip tot_grad_en err_tot_slip err_tot_grad_en])
+            tot_slip, tot_grad_en, tot_elastic_en = total_slip(mesh_coarse, dofs_coarse, sol_coarse, mss_coarse, fe_values, 2, mp)
+            err_tot_slip, err_tot_grad_en, err_tot_elastic_en = total_slip(mesh_fine, dofs_fine, sol_diff, mss_diff, fe_values, 2, mp)
+            push!(df, [size(mesh_coarse.topology, 2), l, tot_slip, tot_grad_en, tot_elastic_en, err_tot_slip, err_tot_grad_en, err_tot_elastic_en]')
         end
-
+ =#
     end
 
-    #save("dataframes/primal_l_study.jld", "df", df_l_study)
 
+    save("dataframes/primal_l_study_$(now()).jld", "df", df_l_study)
 
-    print_timer()
-    save("dataframes/primal_data_frame.jld", "df", df)
+    save("dataframes/primal_data_frame_$(now()).jld", "df", df)
     return df
 end
 
@@ -179,6 +179,7 @@ function total_slip{T}(mesh, dofs, u::Vector{T}, mss, fev, nslip, mp)
     γs = Vector{Vector{T}}(nslip)
     tot_slip = 0.0
     tot_grad_en = 0.0
+    tot_elastic_en = 0.0
     ngradvars = 1
     n_basefuncs = n_basefunctions(get_functionspace(fev))
     nnodes = n_basefuncs
@@ -197,6 +198,9 @@ function total_slip{T}(mesh, dofs, u::Vector{T}, mss, fev, nslip, mp)
         end
 
         for q_point in 1:length(points(get_quadrule(fev)))
+            σ = mss[q_point, i].σ
+            ε = mss[q_point, i].ε
+            tot_elastic_en += 0.5 * ε ⊡ σ * detJdV(fev, q_point)
             for α = 1:nslip
                 ξo = mss[q_point, i].ξo[α]
                 ξ⟂ = mss[q_point, i].ξ⟂[α]
@@ -211,7 +215,7 @@ function total_slip{T}(mesh, dofs, u::Vector{T}, mss, fev, nslip, mp)
     #println("effective  slip = $(sqrt(tot_slip))")
     #println("total_grad = $(tot_grad_en)")
 
-    return sqrt(tot_slip), sqrt(tot_grad_en)
+    return sqrt(tot_slip), tot_grad_en, tot_elastic_en
 end
 
 #startit()

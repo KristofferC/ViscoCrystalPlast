@@ -2,16 +2,20 @@
 # Currently only 1 object, no geometric entity information
 module ComsolMeshReader
 
+using Compat
+
+import Compat.String
+
 type ComsolMesh{dim}
-    version::UTF8String
+    version::String
     space_dim::Int
     coordinates::Vector{NTuple{dim, Float64}}
-    elements::Dict{UTF8String, Vector}
+    elements::Dict{String, Vector}
 end
 
 type LineFeeder
     file::IOStream
-    next_line::UTF8String
+    next_line::String
 end
 
 LineFeeder(f::IOStream) = LineFeeder(f, readline(f))

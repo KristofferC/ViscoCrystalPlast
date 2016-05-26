@@ -1,4 +1,4 @@
-function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g,
+function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g, _,
                             dt, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP)
 
 
@@ -26,7 +26,7 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(a::Vector{T}, a_p
     γs = Vector{Vector{T}}(nslip)
     γs_prev = Vector{Vector{T}}(nslip)
     for α in 1:nslip
-        gd = g_dofs(dim, nnodes, ngradvars, nslip, α)
+        gd = γ_dofs(dim, nnodes, ngradvars, nslip, α)
         γs[α] = a[gd]
         γs_prev[α] = a_prev[gd]
     end

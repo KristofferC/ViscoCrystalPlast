@@ -40,7 +40,6 @@ abstract QuadratureData
 
 include("ComsolMeshReader.jl")
 include("material_parameters.jl")
-#include("newton_problem.jl")
 
 include("mesh.jl")
 include("boundary_conditions.jl")

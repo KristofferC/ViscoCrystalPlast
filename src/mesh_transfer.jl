@@ -33,7 +33,7 @@ function get_global_gauss_point_coordinates{dim, T}(fe_values::FEValues{dim, T},
     e_coordinates = zeros(dim,  n_basefuncs)
     for element_id in 1:n_elements
         element_coordinates!(e_coordinates , mesh, element_id)
-        x_vec = reinterpret(Vec{2, T}, e_coordinates, (n_basefuncs,))
+        x_vec = reinterpret(Vec{dim, T}, e_coordinates, (n_basefuncs,))
         reinit!(fe_values, x_vec)
         for q_point in 1:n_qpoints
             x_glob[q_point, element_id] = function_vector_value(fe_values, q_point, x_vec)
