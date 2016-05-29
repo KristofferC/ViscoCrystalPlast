@@ -25,7 +25,7 @@ function boundary_f_primal(field::Symbol, x, t::Float64)
 end
 
 
-function startit()
+function startit{dim}(::Type{Dim{dim}})
 
 
     df = DataFrame(n_elements = Int[], l = Float64[], tot_slip = Float64[], tot_grad_energy = Float64[], tot_elastic_energy = Float64[],
@@ -33,12 +33,16 @@ function startit()
 
     df_l_study = DataFrame(l = Float64[], tot_slip = Float64[], tot_grad_energy = Float64[], tot_elast_en = Float64[])
 
-    for l in 0.1:0.1:3.0
-        mp = setup_material(Dim{2}, l)
+    function_space = Lagrange{dim, RefTetrahedron, 1}()
+    quad_rule = QuadratureRule(Dim{dim}, RefTetrahedron(), 1)
+    fe_values = FEValues(Float64, quad_rule, function_space)
 
-        function_space = Lagrange{2, RefTetrahedron, 1}()
-        quad_rule = QuadratureRule(Dim{2}, RefTetrahedron(), 1)
-        fe_values = FEValues(Float64, quad_rule, function_space)
+    primal_problem = ViscoCrystalPlast.PrimalProblem(dim, function_space)
+
+    write_dataframe = false
+
+    for l in 0.1:0.1:0.1
+        mp = setup_material(Dim{dim}, l)
 
         times = linspace(0.0, 10.0, 2)
 
@@ -46,23 +50,31 @@ function startit()
         # Solve fine scale problem #
         ############################
         mesh_fine = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/mesh_overkill.mphtxt")
-        dofs_fine = ViscoCrystalPlast.add_dofs(mesh_fine, [:u, :v, :γ1, :γ2])
-        bcs_fine = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_fine, mesh_fine.boundary_nodes, [:u, :v, :γ1, :γ2])
-        pvd_fine = paraview_collection("vtks/shear_primal_fine")
+        if dim == 2
+            mesh_fine = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/mesh_overkill.mphtxt")
+            dofs_fine = ViscoCrystalPlast.add_dofs(mesh_fine, [:u, :v, :γ1, :γ2], (2, 1, 1))
+            bcs_fine = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_fine, mesh_fine.boundary_nodes, [:u, :v, :γ1, :γ2])
+        else
+            mesh_fine = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/3d_cube.mphtxt")
+            dofs_fine = ViscoCrystalPlast.add_dofs(mesh_fine, [:u, :v, :w, :γ1, :γ2], (3, 1, 1))
+            bcs_fine = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_fine, mesh_fine.boundary_nodes, [:u, :v, :w, :γ1, :γ2])
+        end
+
+        pvd_fine = paraview_collection(joinpath(dirname(@__FILE__), "vtks", "shear_primal_fine"))
         timestep_fine = 0
         exporter_fine = (time, u, mss) ->
         begin
             timestep_fine += 1
             mss_nodes = move_quadrature_data_to_nodes(mss, mesh_fine, quad_rule)
-            #output(pvd_fine, time, timestep_fine, "shear_primal_fine", mesh_fine, dofs_fine, u, mss_nodes, quad_rule, mp)
+            output(pvd_fine, time, timestep_fine, "shear_primal_fine", mesh_fine, dofs_fine, u, mss_nodes, quad_rule, mp)
         end
 
-        sol_fine, mss_fine = ViscoCrystalPlast.solve_problem(ViscoCrystalPlast.PrimalProblem(), mesh_fine, dofs_fine, bcs_fine, fe_values, mp, times,
+        sol_fine, mss_fine = ViscoCrystalPlast.solve_problem(primal_problem, mesh_fine, dofs_fine, bcs_fine, fe_values, mp, times,
                                         boundary_f_primal, exporter_fine)
         vtk_save(pvd_fine)
 
-        tot_slip, tot_grad_en, tot_elastic_en = total_slip(mesh_fine, dofs_fine, sol_fine, mss_fine, fe_values, 2, mp)
-        push!(df_l_study, [l tot_slip tot_grad_en tot_elastic_en])
+       # tot_slip, tot_grad_en, tot_elastic_en = total_slip(mesh_fine, dofs_fine, sol_fine, mss_fine, fe_values, 2, mp)
+        #push!(df_l_study, [l tot_slip tot_grad_en tot_elastic_en])
 
         ###############################
         # Solve coarse scale problems #
@@ -112,9 +124,11 @@ function startit()
     end
 
 
-    save("dataframes/primal_l_study_$(now()).jld", "df", df_l_study)
+    if write_dataframe
+        save("dataframes/primal_l_study_$(now()).jld", "df", df_l_study)
 
-    save("dataframes/primal_data_frame_$(now()).jld", "df", df)
+        save("dataframes/primal_data_frame_$(now()).jld", "df", df)
+    end
     return df
 end
 
@@ -141,11 +155,11 @@ function output{QD <: QuadratureData, dim}(pvd, time, timestep, filename, mesh, 
     n_sym_components = dim == 2 ? 3 : 6
     tot_nodes = size(mesh.coords, 2)
     nrelem = size(mesh.topology, 2)
-    vtkfile = vtk_grid(mesh.topology, mesh.coords, "vtks/" * filename * "_$timestep")
+    vtkfile = vtk_grid(mesh.topology, mesh.coords, joinpath(dirname(@__FILE__), "vtks", "$filename" * "_$timestep"))
 
-    vtk_point_data(vtkfile, reinterpret(Float64, SymmetricTensor{2, dim, Float64, 3}[mss_nodes[i].σ for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Stress")
-    vtk_point_data(vtkfile, reinterpret(Float64, SymmetricTensor{2, dim, Float64, 3}[mss_nodes[i].ε  for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Strain")
-    vtk_point_data(vtkfile, reinterpret(Float64, SymmetricTensor{2, dim, Float64, 3}[mss_nodes[i].ε_p for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Plastic strain")
+    vtk_point_data(vtkfile, reinterpret(Float64, [mss_nodes[i].σ for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Stress")
+    vtk_point_data(vtkfile, reinterpret(Float64, [mss_nodes[i].ε  for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Strain")
+    vtk_point_data(vtkfile, reinterpret(Float64, [mss_nodes[i].ε_p for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Plastic strain")
     for α in 1:nslips
         vtk_point_data(vtkfile, Float64[mss_nodes[i].τ[α] for i in 1:tot_nodes], "Schmid $α")
         vtk_point_data(vtkfile, Float64[mss_nodes[i].τ_di[α] for i in 1:tot_nodes], "Tau dissip $α")
@@ -169,13 +183,13 @@ function output{QD <: QuadratureData, dim}(pvd, time, timestep, filename, mesh, 
     end
 
     vtk_point_data(vtkfile, disp, "displacement")
+    vtk_save(vtkfile)
 
     collection_add_timestep(pvd, vtkfile, time)
 
 end
 
 function total_slip{T}(mesh, dofs, u::Vector{T}, mss, fev, nslip, mp)
-    dim = 2
     γs = Vector{Vector{T}}(nslip)
     tot_slip = 0.0
     tot_grad_en = 0.0
@@ -193,7 +207,7 @@ function total_slip{T}(mesh, dofs, u::Vector{T}, mss, fev, nslip, mp)
         x_vec = reinterpret(Vec{2, T}, e_coordinates, (nnodes,))
         reinit!(fev, x_vec)
         for α in 1:nslip
-            gd = ViscoCrystalPlast.g_dofs(dim, nnodes, ngradvars, nslip, α)
+            gd = ViscoCrystalPlast.γ_dofs(dim, nnodes, ngradvars, nslip, α)
             γs[α] = ug[gd]
         end
 

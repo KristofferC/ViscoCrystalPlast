@@ -49,7 +49,7 @@ function update_bcs!(mesh::GeometryMesh, dofs::Dofs, bc::DirichletBoundaryCondit
         dof_type = bc.dof_types[i]
         dof_id = bc.dof_ids[i]
         node = div(dof_id + dofs_per_node -1, dofs_per_node)
-        ViscoCrystalPlast.set_value(bc, f(dof_type, mesh.coords[:, node], time), i)
+        set_value(bc, f(dof_type, mesh.coords[:, node], time), i)
     end
 end
 

@@ -1,3 +1,6 @@
+using JuAFEM
+using ViscoCrystalPlast
+using BlockArrays
 
 prim_field = [0.0006000000238418602,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
 prev_prim_field = zeros(prim_field)
@@ -21,19 +24,70 @@ end
 mp = setup_material(Dim{2})
 function_space = JuAFEM.Lagrange{2, RefTetrahedron, 1}()
 q_rule = QuadratureRule(Dim{2}, RefTetrahedron(), 1)
+n_qpoints = length(points(q_rule))
 fe_values = FEValues(Float64, q_rule, function_space)
 dt = 0.01
 nslip = 2
-ele_matstats = ViscoCrystalPlast.CrystPlastPrimalQD[ViscoCrystalPlast.CrystPlastPrimalQD(nslip, Dim{2}) for i = 1:length(points(q_rule))]
+
+import ViscoCrystalPlast: create_quadrature_data
+mss = [ViscoCrystalPlast.CrystPlastPrimalQD(nslip, Dim{2}) for i = 1:n_qpoints]
+temp_mss = [ViscoCrystalPlast.CrystPlastPrimalQD(nslip, Dim{2}) for i = 1:n_qpoints]
 
 
 
+primal_prob = ViscoCrystalPlast.PrimalProblem(nslip, function_space)
 
+fe(field) = ViscoCrystalPlast.intf(primal_prob, field, prev_prim_field, e_coordinates,
+              fe_values, dt, mss, temp_mss, mp)
+
+prim_field = ones(12)
+f, K = fe(prim_field)
+
+
+fe_u = Vec{2, Float64}[zero(Vec{2, Float64}) for i in 1:3]
+fe_g = Vector{Float64}[zeros(Float64, 3) for i in 1:nslip]
+fe_g2 = Vector{Float64}[zeros(Float64, 3) for i in 1:nslip]
+
+feg2(field) = ViscoCrystalPlast.intf(field, prev_prim_field, e_coordinates,
+              fe_values, fe_u, fe_g, fe_g2, dt, mss, temp_mss, mp)
+
+feg2(prim_field)
+
+dim = 2
+K_element = zeros(12,12)
+G = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
+
+nslip = length(mp.angles)
+
+fe_uG = Vec{dim, G}[zero(Vec{dim, G}) for i in 1:3]
+fe_gG = Vector{G}[zeros(G, 3) for i in 1:nslip]
+fe_gG2 = Vector{G}[zeros(G, 3) for i in 1:nslip]
+
+feg(field) = ViscoCrystalPlast.intf(field, prev_prim_field, e_coordinates,
+              fe_values, fe_uG, fe_gG, fe_gG2, dt, mss, temp_mss, mp)
+
+
+
+Ke! = ForwardDiff.jacobian(feg, mutates = true, chunk_size = 12)
+
+@time for i in 1:10^4
+  fe(prim_field)
+end
+
+@time for i in 1:10^4
+  Ke!(K_element, prim_field)
+end
+
+nslips = 2
+KB = PseudoBlockArray(K_element, [6, [3 for i in 1:nslips]...],
+                                                      [6, [3 for i in 1:nslips]...])
+
+#=
 fe_u = [zero(Vec{2, Float64}) for i in 1:3]
 fe_g = [zeros(Float64, 3) for i in 1:nslip]
 
 
-fe(field) = ViscoCrystalPlast.intf_primal(field, prev_prim_field, e_coordinates, fe_values, fe_u, fe_g, dt, ele_matstats, mp)
+fe(field) = ViscoCrystalPlast.intf(field, prev_prim_field, e_coordinates, fe_values, fe_u, fe_g, dt, ele_matstats, mp)
 
 prim_field = ones(12)
 f = fe(prim_field)
@@ -45,3 +99,5 @@ f_res =  [-2033.6006392059926,-435.11788263371466,43.57985123971975,43.579851239
 
 @test norm(f - f_res) / norm(f_res) <= 1e-6
 
+
+=#

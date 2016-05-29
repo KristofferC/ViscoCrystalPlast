@@ -1,115 +1,3 @@
-using BlockArrays
-using Parameters
-using ViscoCrystalPlast
-
-using JuAFEM
-using ForwardDiff
-using ContMechTensors
-
-
-import ViscoCrystalPlast: GeometryMesh, Dofs, DirichletBoundaryConditions, CrystPlastMP, QuadratureData, CrystPlastDualQD
-
-@enum BlocksInner γ◫ = 1 τ◫ = 2
-@enum BlocksOuter ε◫ = 1 χ⟂◫ = 2 χo◫ = 3
-
-
-if !(isdefined(:DualLocalProblem))
-    @eval begin
-    immutable DualLocalProblem{dim, T}
-        # Inner
-        γ::Vector{T}
-        τ::Vector{T}
-
-        # Outer
-        ε::Vector{T}
-        χ⟂::Vector{T}
-        χo::Vector{T}
-
-        # Residual
-        J_ττ::Matrix{T}
-        J_τγ::Matrix{T}
-        J_γτ::Matrix{T}
-        J_γγ::Matrix{T}
-        J::PseudoBlockMatrix{T, Matrix{T}}
-        R_τ::Vector{T}
-        R_γ::Vector{T}
-        R::PseudoBlockVector{T, Vector{T}}
-
-
-        # ATS tensor
-        Q_γε ::Matrix{T}
-        Q_γχ⟂::Matrix{T}
-        Q_γχo::Matrix{T}
-        Q_τε ::Matrix{T}
-        Q_τχ⟂::Matrix{T}
-        Q_τχo::Matrix{T}
-        Q::PseudoBlockMatrix{T, Matrix{T}}
-
-        A::BlockMatrix{T, Matrix{T}}
-
-        outer::PseudoBlockVector{T, Vector{T}}
-        inner::PseudoBlockVector{T, Vector{T}}
-    end
-    end
-end
-
-
-function DualLocalProblem{dim}(nslips::Int, ndim::Type{Dim{dim}})
-    T = Float64
-
-    if dim == 2
-        ncomp = 4
-    elseif dim == 3
-        ncomp = 9
-    else
-        error("invalid dim")
-    end
-
-    γ = zeros(T, nslips)
-    τ = zeros(T, nslips)
-    ε = zeros(T, ncomp)
-    χ⟂ = zeros(T, nslips)
-    χo = zeros(T, nslips)
-
-    J_ττ = zeros(T, nslips, nslips)
-    J_τγ = zeros(T, nslips, nslips)
-    J_γτ = zeros(T, nslips, nslips)
-    J_γγ = zeros(T, nslips, nslips)
-    J    = PseudoBlockArray(zeros(T, 2*nslips, 2*nslips), [nslips, nslips], [nslips, nslips])
-    R_τ  = zeros(T, nslips)
-    R_γ  = zeros(T, nslips)
-    R    = PseudoBlockArray(zeros(T, 2*nslips), [nslips, nslips])
-    dR    = PseudoBlockArray(zeros(T, 2*nslips), [nslips, nslips])
-
-    Q_γε = zeros(T, nslips, ncomp)
-    Q_γχ⟂ = zeros(T, nslips, nslips)
-    Q_γχo = zeros(T, nslips, nslips)
-    Q_τε = zeros(T, nslips, ncomp)
-    Q_τχ⟂ = zeros(T, nslips, nslips)
-    Q_τχo = zeros(T, nslips, nslips)
-
-    if dim == 2
-        Q = PseudoBlockArray(zeros(T, 2*nslips, ncomp+nslips), [nslips, nslips], [ncomp, nslips])
-        outer = PseudoBlockArray(zeros(T, ncomp+nslips), [ncomp, nslips])
-        A = BlockArray(zeros(T, 2*nslips, ncomp+2*nslips), [nslips, nslips], [ncomp, nslips, nslips])
-    else
-        Q = PseudoBlockArray(zeros(T, 2*nslips, ncomp+2*nslips), [nslips, nslips], [ncomp, nslips, nslips])
-        outer = PseudoBlockArray(zeros(T, ncomp+2*nslips), [ncomp, nslips, nslips])
-        A = BlockArray(zeros(T, 2*nslips, ncomp+2*nslips), [nslips, nslips], [ncomp, nslips, nslips])
-    end
-    inner = PseudoBlockArray(zeros(T, 2*nslips), [nslips, nslips])
-    Δinner = PseudoBlockArray(zeros(T, 2*nslips), [nslips, nslips])
-    DualLocalProblem{dim, T}(γ, τ, ε, χ⟂, χo, J_ττ, J_τγ, J_γτ, J_γγ, J, R_τ, R_γ, R,
-                             Q_γε, Q_γχ⟂, Q_γχo, Q_τε, Q_τχ⟂, Q_τχo, Q, A, outer, inner)
-end
-
-function reset!(dlp::DualLocalProblem)
-    fill!(full(dlp.J), 0.0)
-    fill!(full(dlp.R), 0.0)
-    fill!(full(dlp.Q), 0.0)
-    return dlp
-end
-
 function update_problem!{dim}(problem::DualLocalProblem{dim}, Δt, mp, ms)
     @unpack problem: γ, τ, ε, χ⟂, χo, J_ττ, J_τγ, J_γτ, J_γγ, J, R_τ, R_γ, R, outer, inner
 
@@ -201,20 +89,30 @@ function consistent_tangent{dim}(out::Vector, problem::DualLocalProblem{dim}, �
     update_problem!(problem, ∆t, mp, ms)
     @assert norm(problem.R) <= 1e-6
     update_ats!(problem, ∆t, mp, ms)
-    # copy!(problem.A,
+    A = full(problem.J) \ full(problem.Q)
+    scale!(A, -1)
+    copy!(problem.A, A)
 
-    return -inv(full(problem.J)) * full(problem.Q)
+    return return problem.A
 end
 
 
 function solve_local_problem{T}(out::Vector{T}, problem::DualLocalProblem, ∆t, mp, ms, temp_ms)
     # Set initial value
 
-    problem.inner[γ◫] = ms.γ
-    problem.inner[τ◫] = ms.τ_di
+    @inbounds problem.inner[γ◫] = ms.γ
+    @inbounds problem.inner[τ◫] = ms.τ_di
 
     copy!(full(problem.outer), out)
 
+
+    newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
+
+
+    return full(problem.inner)
+end
+
+function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
     max_iters = 40
     n_iters = 1
 
@@ -236,28 +134,9 @@ function solve_local_problem{T}(out::Vector{T}, problem::DualLocalProblem, ∆t,
         end
         n_iters +=1
     end
-
-    return full(problem.inner)
 end
 
 #=
-function setup_material{dim}(::Type{Dim{dim}}, lα)
-    E = 200000.0
-    ν = 0.3
-    n = 2.0
-    #lα = 0.5
-    H⟂ = 0.1E
-    Ho = 0.1E
-    C = 1.0e3
-    tstar = 1000.0
-    angles = [20.0, 40.0]
-    mp = ViscoCrystalPlast.CrystPlastMP(Dim{dim}, E, ν, n, H⟂, Ho, lα, tstar, C, angles)
-    return mp
-end
-
-
-
-
 function foo()
     srand(1234)
     nslip = 2
@@ -267,22 +146,22 @@ function foo()
     c = rand(nslip);
     d =  rand(nslip);
 
-    problem = DualLocalProblem(nslip, Dim{dim});
+    problem = ViscoCrystalPlast.DualLocalProblem(nslip, Dim{dim});
     out = [a; b] #rand(dim == 2? 4 : 9);
     problem.inner[γ◫] = c; #rand(nslip);
     problem.inner[τ◫] = d; #rand(nslip);
 
-    mp = setup_material(Dim{dim}, 0.1);
-    ms = CrystPlastDualQD(nslip, Dim{dim});
-    temp_ms = CrystPlastDualQD(nslip, Dim{dim});
+    mp = setup_material(Dim{dim});
+    ms = ViscoCrystalPlast.CrystPlastDualQD(nslip, Dim{dim});
+    temp_ms = ViscoCrystalPlast.CrystPlastDualQD(nslip, Dim{dim});
 
 
-    X = solve_local_problem(out, problem, 0.1, mp, ms, temp_ms)
+    X = ViscoCrystalPlast.solve_local_problem(out, problem, 0.1, mp, ms, temp_ms)
     #copy!(full(problem.inner), X)
     temp_ms.γ = problem.inner[γ◫]
     temp_ms.τ_di = problem.inner[τ◫]
     @time for i in 1:10^5
-        consistent_tangent(out, problem, 0.1, mp, ms, temp_ms)
+        ViscoCrystalPlast.solve_local_problem(out, problem, 0.1, mp, ms, temp_ms)
     end
 
 

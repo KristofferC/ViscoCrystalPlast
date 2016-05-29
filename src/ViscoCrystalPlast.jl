@@ -4,10 +4,11 @@ using ContMechTensors
 using JuAFEM
 using CALFEM
 using Parameters
-using ForwardDiff
+#using ForwardDiff
 using TimerOutputs
 using NearestNeighbors
 using GeometricalPredicates
+using BlockArrays
 
 const DEBUG = true
 
@@ -31,8 +32,6 @@ end
 
 abstract AbstractProblem
 
-immutable DualProblem <: AbstractProblem end
-immutable PrimalProblem <: AbstractProblem end
 
 import ForwardDiff.GradientNumber
 
@@ -47,16 +46,41 @@ include("sparse_tools.jl")
 include("mesh_transfer.jl")
 
 include("utilities.jl")
-include("solve_problem.jl")
 
+include("primal/PrimalProblem.jl")
+
+immutable PrimalProblem{T} <: AbstractProblem
+    global_problem::PrimalGlobalProblem{T}
+end
+
+
+function PrimalProblem(nslips, fspace::JuAFEM.FunctionSpace)
+    PrimalProblem(PrimalGlobalProblem(nslips, fspace))
+end
 
 include("primal/quadrature_data.jl")
-include("primal/intf_primal.jl")
+#include("primal/intf_primal.jl")
+include("primal/global_problem.jl")
 
+
+
+include("dual/DualProblem.jl")
+
+immutable DualProblem{dim, T, N} <: AbstractProblem
+    local_problem::DualLocalProblem{dim, T}
+    global_problem::DualGlobalProblem{dim, T, N}
+end
+
+
+function DualProblem{dim}(nslips, fspace::JuAFEM.FunctionSpace{dim})
+    DualProblem(DualLocalProblem(nslips, Dim{dim}), DualGlobalProblem(nslips, fspace))
+end
+
+include("dual/local_problem.jl")
 include("dual/quadrature_data.jl")
-include("dual/intf_dual.jl")
+#include("dual/intf_dual.jl")
+include("dual/global_problem.jl")
 
-
-
+include("solve_problem.jl")
 
 end # module

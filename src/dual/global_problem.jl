@@ -1,126 +1,66 @@
-@enum DualBlocksGlobal u = 1 ξ⟂ = 2 ξo = 3
 
-if !(isdefined(:DualGlobalProblem))
-    @eval begin
-    immutable DualGlobalProblem{dim, T}
-    u::Vector{T}
-    ξ⟂::Vector{T}
-    ξo::Vector{T}
-    a::PseudoBlockVector{T, Vector{T}}
-
-    fu::Vector{T}
-    fξ⟂::Vector{T}
-    fξ⟂o::Vector{T}
-    f::PseudoBlockVector{T, Vector{T}}
-
-    Kuu::Matrix{T}
-    Kuξ⟂::Matrix{T}
-    Kuξo::Matrix{T}
-    Kξ⟂u::Matrix{T}
-    Kξ⟂ξ⟂::Matrix{T}
-    Kξ⟂ξo::Matrix{T}
-    Kξou::Matrix{T}
-    Kξoξ⟂::Matrix{T}
-    Kξoξo::Matrix{T}
-
-    K::PseudoBlockMatrix{T, Matrix{T}}
-    end
-    end
-end
-
-function DualGlobalProblem{dim}(nslips::Int, fspace_u::JuAFEM.FunctionSpace{dim},
-                                fspace_ξ::JuAFEM.FunctionSpace{dim} = fspace_u)
-    T = Float64
-
-    u_ = zeros(T, n_basefunctions(fspace_u) * dim)
-    ξ_⟂ = zeros(T, n_basefunctions(fspace_u))
-    ξ_o = zeros(T, n_basefunctions(fspace_u))
-    a = PseudoBlockArray(zeros(T, (2+dim) * n_basefunctions(fspace_u)), [length(u), length(ξ⟂), length(ξo)])
-
-    f_u  = similar(u)
-    f_ξ⟂ = similar(ξ⟂)
-    f_ξo = similar(ξo)
-    f = similar(a)
-
-    K_uu   = zeros(T, length(u), length(u))
-    K_uξ⟂  = zeros(T, length(u) , length(ξ⟂))
-    K_uξo  = zeros(T, length(u) , length(ξo))
-    K_ξ⟂u  = zeros(T, length(ξ⟂), length(u))
-    K_ξ⟂ξ⟂ = zeros(T, length(ξ⟂), length(ξ⟂))
-    K_ξ⟂ξo = zeros(T, length(ξ⟂), length(ξo))
-    K_ξou  = zeros(T, length(ξo), length(u))
-    K_ξoξ⟂ = zeros(T, length(ξo), length(ξ⟂))
-    K_ξoξo = zeros(T, length(ξo), length(ξo))
-
-    K = PseudoBlockArray(zeros(length(a), length(a)), [length(u), length(ξ⟂), length(ξo)], [length(u), length(ξ⟂), length(ξo)])
-
-    return DualGlobalProblem{dim, T}(u, ξ_⟂, ξ_o, a, f_u , f_ξ⟂, f_ξo, f, K_uu, K_uξ⟂, K_uξo,
-                                     K_ξ⟂u, K_ξ⟂ξ⟂, K_ξ⟂ξo, K_ξou, K_ξoξ⟂, K_ξoξo, K)
-end
-
-
-
-function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractArray{Q}, x::AbstractArray{Q}, fev::FEValues{dim}, fe_u, fe_g, dt,
-                             mss::AbstractVector{MS}, temp_mss::AbstractVector{MS}, mp::CrystPlastMP)
+function intf{dim, T, Q, MS <: CrystPlastDualQD}(
+                        dual_prob::DualProblem{dim, T}, a::Vector{T}, prev_a::AbstractArray{Q},
+                        x::AbstractArray{Q}, fev::FEValues{dim}, dt,
+                        mss::AbstractVector{MS}, temp_mss::AbstractVector{MS}, mp::CrystPlastMP)
     @unpack mp: s, m, H⟂, Ee, sxm_sym, l
     nslip = length(sxm_sym)
 
-    ndim = 2
-    ngradvars = 1
-    n_basefuncs = n_basefunctions(get_functionspace(fev))
-    nnodes = n_basefuncs
+    glob_prob = dual_prob.global_problem
 
-    @assert length(a) == nnodes * (ndim + ngradvars * nslip)
-    x_vec = reinterpret(Vec{2, Q}, x, (n_basefuncs,))
+    @unpack glob_prob: u_nodes, ξo_nodes, ξ⟂_nodes
+    @unpack glob_prob: f_u , f_ξ⟂s, f_ξos, f
+    @unpack glob_prob: K_uu, K_uξ⟂s, K_uξos, K_ξ⟂su, K_ξ⟂sξ⟂s, K_ξ⟂sξos, K_ξosu, K_ξosξ⟂s, K_ξosξos, K
+    @unpack glob_prob: u_dofs, ξ⟂s_dofs, ξos_dofs
+    @unpack glob_prob: χ⟂, χo, Aγεs
+
+    ngradvars = dim - 1
+    nnodes = n_basefunctions(get_functionspace(fev))
+
+    @assert length(a) == nnodes * (dim + ngradvars * nslip)
+
+    x_vec = reinterpret(Vec{dim, Q}, x, (nnodes,))
     reinit!(fev, x_vec)
+    reset!(glob_prob)
 
+    extract!(u_nodes, a, u_dofs)
 
-    fill!(fe_u, zero(Vec{dim, T}))
-    for fe_g_alpha in fe_g
-        fill!(fe_g_alpha, zero(T))
-    end
+    u_vec = reinterpret(Vec{dim, T}, u_nodes, (nnodes,))
 
-    χ = [zero(T) for i in 1:nslip]
-    ξα = [zero(Vec{2, T}) for i in 1:n_basefuncs]
+    @inbounds begin
 
-    ϕ = zeros(n_basefuncs)
-    dV = zeros(n_basefuncs)
-    ∇ϕ = [zeros(Vec{2, T}) for i in 1:n_basefuncs]
-
-    q_rule = get_quadrule(fev)
-
-    ud = u_dofs(ndim, nnodes, ngradvars, nslip)
-    a_u = a[ud]
-    u_nodes = reinterpret(Vec{2, T}, a_u, (n_basefuncs,))
-    ξ⟂_nodes = Vector{Vector{T}}(nslip)
     for α in 1:nslip
-        ξ⟂_node_dofs = g_dofs(ndim, nnodes, ngradvars, nslip, α)
-        ξ⟂_nodes[α] = reinterpret(T, a[ξ⟂_node_dofs], (n_basefuncs,))
+        extract!(ξ⟂_nodes[α], a, ξ⟂s_dofs[α])
+        if dim == 3
+            extract!(ξo_nodes[α], a, ξos_dofs[α])
+        end
     end
 
-    local ms
-    local temp_ms
-    _stress!(Y::Vector) = stress!(Y, dt, mp, ms, temp_ms)
-    _stress_diff(Y::Vector) = consistent_tangent(Y, dt, mp, temp_ms)
-    @implement_jacobian _stress! _stress_diff
-
-    for q_point in 1:length(JuAFEM.points(q_rule))
-        ε = function_vector_symmetric_gradient(fev, q_point, u_nodes)
+    for q_point in 1:length(JuAFEM.points(get_quadrule(fev)))
+        ϕ = i -> shape_value(fev, q_point, i)
+        ∇ϕ = i -> shape_gradient(fev, q_point, i)
+        ε = function_vector_symmetric_gradient(fev, q_point, u_vec)
 
         for α in 1:nslip
             χ⟂[α] = function_scalar_gradient(fev, q_point, ξ⟂_nodes[α]) ⋅ mp.s[α]
             if dim == 3
-                χo[α] = function_scalar_gradient(fev, q_point, ξo_nodes[α]) ⋅ mp.l[α]
+                χo[α] = function_scalar_gradient(fev, q_point, ξ⟂_nodes[α]) ⋅ mp.l[α]
             end
         end
 
-        out = [vec(ε); χ]
+        if dim == 2
+            Y = [ε[1,1], ε[1,2], ε[2,1], ε[2,2], χ⟂[1], χ⟂[2]]
+        else
+            Y =  [ε[1,1], ε[1,2], ε[1,3], ε[2,1], ε[2,2], ε[2,3], ε[3,1], ε[3,2], ε[3,3],  χ⟂[1], χ⟂[2], χo[1], χo[2]]
+        end
         ms = mss[q_point]
         temp_ms = temp_mss[q_point]
-        inner = solve_local_problem(Y, local_problem, ∆t, mp, ms, temp_ms)
-        γ = getblock!(inner.γ, inner, γ◫)
-        τ_di = getblock!(inner.τ, inner, τ◫)
-        A = consistent_tangent(out, local_problem, ∆t, mp, ms, temp_ms)
+
+
+        X = solve_local_problem(Y, dual_prob.local_problem, dt, mp, ms, temp_ms)
+
+        γ = X[1:nslip]
+        τ_di = X[nslip+1:end]
 
         # Store
         ε_p = zero(ε)
@@ -136,53 +76,102 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
             temp_ms.ε  = ε
             temp_ms.ε_p = ε_p
             for α in 1:nslip
-                temp_ms.χ[α] = χ[α]
+                temp_ms.χ⟂[α] = χ⟂[α]
+                temp_ms.χo[α] = χo[α]
                 temp_ms.τ_di[α] = τ_di[α]
                 temp_ms.γ[α] = γ[α]
                 temp_ms.τ[α] = (σ ⊡ mp.sxm_sym[α])
             end
         end
 
-        for i in 1:n_basefuncs
-            ϕ[i] = shape_value(fev, q_point, i)
-            ∇ϕ[i] = shape_gradient(fev, q_point, i)
-            dV[i] = detJdV(fev, q_point, i)
+
+        A = consistent_tangent(Y, dual_prob.local_problem, dt, mp, ms, temp_ms)
+
+        Aγε = A[γ◫, ε◫]
+        Aγξ⟂ = A[γ◫, ξ⟂◫]
+
+        #######################
+        # Displacement + grad #
+        #######################
+        DA = zero(SymmetricTensor{4, dim})
+        for α in 1:nslip
+            Aγεa = Aγε[α, :]
+            DA += mp.Esm[α] ⊗ symmetric(Tensor{2, dim}(Aγεa))
+            Aγεs[α] = Tensor{2, dim}(Aγεa)
         end
 
-        for α in 1:nslips
-            for β in 1:nslips
-                for i in 1:n_basefuncs
-                    for j in 1:n_basefuncs
-                        if α == β
-                            K_ξoξo[i,j] += ϕ[i] / (mp.H⟂ * mp.lα^2) * ϕ[j] * dV[i]
-                        end
-
-        for i in 1:n_basefuncs
-            ∇ϕ = shape_gradient(fev, q_point, i)
-            fe_u[i] += σ ⋅ ∇ϕ * detJdV(fev, q_point)
-
-            for j in 1:n_basefuncs
-
+        DAγξos = [zero(SymmetricTensor{2, dim}) for α in 1:nslip]
+        for α in 1:nslip, β in 1:nslip
+            DAγξos[β] += mp.Esm[α] * Aγξ⟂[α, β]
         end
 
+        for i in 1:nnodes
+            ∇ϕ(i) = shape_gradient(fev, q_point, i)
+            updateblock!(f_u, σ ⋅ ∇ϕ(i) * detJdV(fev, q_point), +, i)
+            for j in 1:nnodes
+                updateblock!(K_uu, dotdot(∇ϕ(i), Ee - DA, ∇ϕ(j)) * detJdV(fev, q_point), +, i, j)
+                for β in 1:nslip
+                    K_uξ⟂s_qp = -(∇ϕ(i) ⋅ DAγξos[β]) * (∇ϕ(j) ⋅ mp.s[β]) * detJdV(fev, q_point)
+                    K_ξ⟂su_qp = -∇ϕ(i) ⋅ Aγεs[β] * (∇ϕ(j) ⋅ mp.s[β]) * detJdV(fev, q_point)
+                    updateblock!(K_uξ⟂s[β], K_uξ⟂s_qp, +, i, j)
+                    updateblock!(K_ξ⟂su[β], K_ξ⟂su_qp, +, i, j)
+                end
+            end
+        end
+
+        ###############
+        # grad + grad #
+        ###############
         for α in 1:nslip
             ξ⟂_gp = function_scalar_value(fev, q_point, ξ⟂_nodes[α])
             g⟂_gp = ξ⟂_gp / (mp.H⟂ * mp.lα^2)
 
-            for i in 1:n_basefuncs
+            if dim == 3
+                ξo_gp = function_scalar_value(fev, q_point, ξo_nodes[α])
+                go_gp = ξo_gp / (mp.Ho * mp.lα^2)
+            end
 
-                ϕ = shape_value(fev, q_point, i)
-                ∇ϕ = shape_gradient(fev, q_point, i)
-                fe_g[α][i] += (g⟂_gp * ϕ + γ[α] * ∇ϕ ⋅ mp.s[α]) * detJdV(fev, q_point)
+            for i in 1:nnodes
+                f_ξ⟂s[α][i] -= (g⟂_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.s[α]) * detJdV(fev, q_point)
+                if dim == 3
+                    f_ξos[α][i] -= (go_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.l[α]) * detJdV(fev, q_point)
+                end
+                for j in 1:nnodes
+                    for β in 1:nslip
+                        if α == β
+                            K_ξ⟂sξ⟂s[α, β][i,j] -= ϕ(i) / (mp.H⟂ * mp.lα^2) * ϕ(j) * detJdV(fev, q_point)
+                        end
+                        K_ξ⟂sξ⟂s[α, β][i,j] -=  ∇ϕ(i) ⋅ mp.s[β] * Aγξ⟂[β, α] * ∇ϕ(j) ⋅ mp.s[α] * detJdV(fev, q_point)
+                        if dim == 3
+                            if α == β
+                            K_ξosξos[α, β][i,j] -= ϕ(i) / (mp.Ho * mp.lα^2) * ϕ(j) * detJdV(fev, q_point)
+                            end
+                            K_ξosξos[α, β][i,j] -= ∇ϕ(i) ⋅ mp.l[α] * Aγξ⟂[β, α] * ∇ϕ(j) ⋅ mp.l[α] * detJdV(fev, q_point)
+                        end
+                    end
+                end
             end
         end
     end
 
-    fe = zeros(a)
-    fe_u_jl = reinterpret(T, fe_u, (ndim * n_basefuncs,))
-    fe[ud] = fe_u_jl
+
+    f[u_dofs] = full(f_u)
     for α in 1:nslip
-        fe[g_dofs(ndim, nnodes, ngradvars, nslip, α)] = reinterpret(T, fe_g[α], (n_basefuncs,))
+        if dim == 2
+            f[ξ⟂s_dofs[α]] = f_ξ⟂s[α]
+        else
+            f[ξ⟂s_dofs[α]] = f_ξ⟂s[α]
+            f[ξos_dofs[α]] = f_ξos[α]
+        end
     end
-    return fe
+    K[u◫, u◫] = K_uu
+    for α in 1:nslip
+        K[Block(Int(u◫) + α, Int(u◫))] = K_uξ⟂s[α]'
+        K[Block(Int(u◫), Int(u◫) + α)] = K_ξ⟂su[α]
+        for β in 1:nslip
+            K[Block(Int(u◫) + β, Int(u◫) + α)] = K_ξ⟂sξ⟂s[α, β]
+        end
+    end
+    end # inbounds
+    return full(f), full(K)
 end

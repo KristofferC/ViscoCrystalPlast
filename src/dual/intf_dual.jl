@@ -54,6 +54,11 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
     for fe_ξ⟂_alpha in fe_ξ⟂
         fill!(fe_ξ⟂_alpha, zero(T))
     end
+    if dim == 3
+        for fe_ξo_alpha in fe_ξ⟂
+            fill!(fe_ξo_alpha, zero(T))
+        end
+    end
 
 
     χ⟂ = [zero(T) for i in 1:nslip]
@@ -61,7 +66,7 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
 
     q_rule = get_quadrule(fev)
 
-    ud = u_dofs(dim, nnodes, ngradvars, nslip)
+    ud = compute_udofs(dim, nnodes, ngradvars, nslip)
     a_u = a[ud]
     u_nodes = reinterpret(Vec{dim, T}, a_u, (n_basefuncs,))
     ξ⟂_nodes = Vector{Vector{T}}(nslip)
@@ -69,10 +74,10 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
 
     for α in 1:nslip
         if dim == 2
-            ξ⟂_node_dofs = γ_dofs(dim, nnodes, ngradvars, nslip, α)
+            ξ⟂_node_dofs = compute_γdofs(dim, nnodes, ngradvars, nslip, α)
         else
-            ξ⟂_node_dofs = ξ_dofs(dim, nnodes, ngradvars, nslip, α, :ξ⟂)
-            ξo_node_dofs = ξ_dofs(dim, nnodes, ngradvars, nslip, α, :ξo)
+            ξ⟂_node_dofs = compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξ⟂)
+            ξo_node_dofs = compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξo)
         end
         ξ⟂_nodes[α] = a[ξ⟂_node_dofs]
         if dim == 3
@@ -148,9 +153,9 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
             for i in 1:n_basefuncs
                 ϕ = shape_value(fev, q_point, i)
                 ∇ϕ = shape_gradient(fev, q_point, i)
-                fe_ξ⟂[α][i] += (g⟂_gp * ϕ + γ[α] * ∇ϕ ⋅ mp.s[α]) * detJdV(fev, q_point)
+                fe_ξ⟂[α][i] -= (g⟂_gp * ϕ + γ[α] * ∇ϕ ⋅ mp.s[α]) * detJdV(fev, q_point)
                 if dim == 3
-                    fe_ξo[α][i] += (go_gp * ϕ + γ[α] * ∇ϕ ⋅ mp.l[α]) * detJdV(fev, q_point)
+                    fe_ξo[α][i] -= (go_gp * ϕ + γ[α] * ∇ϕ ⋅ mp.l[α]) * detJdV(fev, q_point)
                 end
             end
         end
@@ -161,10 +166,10 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
     fe[ud] = fe_u_jl
     for α in 1:nslip
         if dim == 2
-            fe[γ_dofs(dim, nnodes, ngradvars, nslip, α)] = reinterpret(T, fe_ξ⟂[α], (n_basefuncs,))
+            fe[compute_γdofs(dim, nnodes, ngradvars, nslip, α)] = reinterpret(T, fe_ξ⟂[α], (n_basefuncs,))
         else
-            fe[ξ_dofs(dim, nnodes, ngradvars, nslip, α, :ξ⟂)] = reinterpret(T, fe_ξ⟂[α], (n_basefuncs,))
-            fe[ξ_dofs(dim, nnodes, ngradvars, nslip, α, :ξo)] = reinterpret(T, fe_ξo[α], (n_basefuncs,))
+            fe[compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξ⟂)] = reinterpret(T, fe_ξ⟂[α], (n_basefuncs,))
+            fe[compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξo)] = reinterpret(T, fe_ξo[α], (n_basefuncs,))
         end
     end
     return fe

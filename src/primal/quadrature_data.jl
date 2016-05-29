@@ -21,25 +21,25 @@ end
 
 get_type{dim, T, M}(::Type{CrystPlastPrimalQD{dim, T, M}}) = CrystPlastPrimalQD
 
-function Base.(:*)(n::Number, qd::CrystPlastPrimalQD)
+function Base.:*(n::Number, qd::CrystPlastPrimalQD)
     CrystPlastPrimalQD(n * qd.σ, n * qd.ε, n * qd.ε_p, n * qd.τ_di, n * qd.τ, n * qd.ξo, n * qd.ξ⟂)
 end
 
-Base.(:*)(qd::CrystPlastPrimalQD, n::Number) = n * qd
+Base.:*(qd::CrystPlastPrimalQD, n::Number) = n * qd
 
-function Base.(:/)(qd::CrystPlastPrimalQD, n::Number)
+function Base.:/(qd::CrystPlastPrimalQD, n::Number)
     CrystPlastPrimalQD(qd.σ / n, qd.ε / n, qd.ε_p / n, qd.τ_di / n, qd.τ / n, qd.ξo / n, qd.ξ⟂ / n)
 end
 
-function Base.(:-)(qd1::CrystPlastPrimalQD, qd2::CrystPlastPrimalQD)
+function Base.:-(qd1::CrystPlastPrimalQD, qd2::CrystPlastPrimalQD)
     CrystPlastPrimalQD(qd1.σ - qd2.σ, qd1.ε - qd2.ε, qd1.ε_p - qd2.ε_p, qd1.τ_di - qd2.τ_di, qd1.τ - qd2.τ, qd1.ξo - qd2.ξo, qd1.ξ⟂ - qd2.ξ⟂)
 end
 
 
-function Base.(:.*)(qd1::CrystPlastPrimalQD, qd2::CrystPlastPrimalQD)
+function Base.:.*(qd1::CrystPlastPrimalQD, qd2::CrystPlastPrimalQD)
     CrystPlastPrimalQD(qd1.σ .* qd2.σ, qd1.ε .* qd2.ε, qd1.ε_p .* qd2.ε_p, qd1.τ_di .* qd2.τ_di, qd1.τ .* qd2.τ, qd1.ξo .* qd2.ξo, qd1.ξ⟂ .* qd2.ξ⟂)
 end
 
-function Base.(:+)(qd1::CrystPlastPrimalQD, qd2::CrystPlastPrimalQD)
+function Base.:+(qd1::CrystPlastPrimalQD, qd2::CrystPlastPrimalQD)
     CrystPlastPrimalQD(qd1.σ + qd2.σ, qd1.ε + qd2.ε, qd1.ε_p + qd2.ε_p, qd1.τ_di + qd2.τ_di, qd1.τ + qd2.τ, qd1.ξo + qd2.ξo, qd1.ξ⟂ + qd2.ξ⟂)
 end
