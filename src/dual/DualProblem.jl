@@ -95,7 +95,7 @@ function DualGlobalProblem{dim}(nslips::Int, fspace_u::JuAFEM.FunctionSpace{dim}
     K_ξ⟂su  = [PseudoBlockArray(zeros(T, length(u), length(ξo)), dim * ones(Int, nnodes), ones(Int, nnodes)) for i in 1:nslips]
     K_ξ⟂sξ⟂s = [zeros(T, length(ξ⟂), length(ξ⟂)) for i in 1:nslips, j in 1:nslips]
     K_ξ⟂sξos = [zeros(T, length(ξ⟂), length(ξo)) for i in 1:nslips, j in 1:nslips]
-    K_ξosu  = [PseudoBlockArray(zeros(T, length(ξo), length(u)), ones(Int, nnodes), dim * ones(Int, nnodes)) for i in 1:nslips]
+    K_ξosu  = [PseudoBlockArray(zeros(T, length(u), length(ξo)), dim * ones(Int, nnodes), ones(Int, nnodes)) for i in 1:nslips]
     K_ξosξ⟂s = [zeros(T, length(ξo), length(ξ⟂)) for i in 1:nslips, j in 1:nslips]
     K_ξosξos = [zeros(T, length(ξ⟂), length(ξo)) for i in 1:nslips, j in 1:nslips]
 
@@ -103,8 +103,8 @@ function DualGlobalProblem{dim}(nslips::Int, fspace_u::JuAFEM.FunctionSpace{dim}
         K = PseudoBlockArray(zeros(length(f), length(f)), [length(u), [length(ξ⟂) for i in 1:nslips]...],
                                                           [length(u), [length(ξ⟂) for i in 1:nslips]...])
     else
-        K = PseudoBlockArray(zeros(length(f), length(f)), [length(u), nslips * length(ξ⟂), nslips * length(ξo)],
-                                                          [length(u), nslips * length(ξ⟂), nslips * length(ξo)])
+         K = PseudoBlockArray(zeros(length(f), length(f)), [length(u), [length(ξ⟂) for i in 1:nslips]..., [length(ξo) for i in 1:nslips]...],
+                                                           [length(u), [length(ξ⟂) for i in 1:nslips]..., [length(ξo) for i in 1:nslips]...])
     end
 
     # Dofs
@@ -112,11 +112,11 @@ function DualGlobalProblem{dim}(nslips::Int, fspace_u::JuAFEM.FunctionSpace{dim}
     u_dofs = compute_udofs(dim, nnodes, ngradvars, nslips)
 
     if dim == 2
-        ξ⟂_dofs = [compute_γdofs(dim, nnodes, ngradvars, nslips, α) for α in 1:nslips]
+        ξ⟂_dofs = [compute_γdofs(dim, nnodes, 1, nslips, α) for α in 1:nslips]
         ξo_dofs = [0:0 for α in 1:nslips]
     else
-        ξ⟂_dofs = [compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξ⟂) for α in 1:nslips]
-        ξo_dofs = [compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξo) for α in 1:nslips]
+        ξ⟂_dofs = [compute_ξdofs(dim, nnodes, 1, nslips, α, :ξ⟂) for α in 1:nslips]
+        ξo_dofs = [compute_ξdofs(dim, nnodes, 1, nslips, α, :ξo) for α in 1:nslips]
     end
 
     # Misc

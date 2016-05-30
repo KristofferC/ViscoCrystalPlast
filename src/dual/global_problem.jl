@@ -48,10 +48,11 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             end
         end
 
+        @assert nslip == 2
         if dim == 2
-            Y = [ε[1,1], ε[1,2], ε[2,1], ε[2,2], χ⟂[1], χ⟂[2]]
+            Y = [ε[1,1], ε[2,1], ε[1,2], ε[2,2], χ⟂[1], χ⟂[2]]
         else
-            Y =  [ε[1,1], ε[1,2], ε[1,3], ε[2,1], ε[2,2], ε[2,3], ε[3,1], ε[3,2], ε[3,3],  χ⟂[1], χ⟂[2], χo[1], χo[2]]
+            Y =  [ε[1,1], ε[2,1], ε[3,1], ε[1,2], ε[2,2], ε[3,2], ε[1,3], ε[2,3], ε[3,3],  χ⟂[1], χ⟂[2], χo[1], χo[2]]
         end
         ms = mss[q_point]
         temp_ms = temp_mss[q_point]
@@ -59,8 +60,8 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
 
         X = solve_local_problem(Y, dual_prob.local_problem, dt, mp, ms, temp_ms)
 
-        γ = X[1:nslip]
-        τ_di = X[nslip+1:end]
+        γ = X[γ◫]
+        τ_di = X[τ◫]
 
         # Store
         ε_p = zero(ε)
@@ -89,6 +90,9 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
 
         Aγε = A[γ◫, ε◫]
         Aγξ⟂ = A[γ◫, ξ⟂◫]
+        if dim == 3
+            Aγξo = A[γ◫, ξo◫]
+        end
 
         #######################
         # Displacement + grad #
@@ -100,9 +104,15 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             Aγεs[α] = Tensor{2, dim}(Aγεa)
         end
 
-        DAγξos = [zero(SymmetricTensor{2, dim}) for α in 1:nslip]
+        DAγξ⟂s = [zero(SymmetricTensor{2, dim}) for α in 1:nslip]
+        if dim == 3
+            DAγξos = [zero(SymmetricTensor{2, dim}) for α in 1:nslip]
+        end
         for α in 1:nslip, β in 1:nslip
-            DAγξos[β] += mp.Esm[α] * Aγξ⟂[α, β]
+            DAγξ⟂s[β] += mp.Esm[α] * Aγξ⟂[α, β]
+            if dim == 3
+                DAγξos[β] += mp.Esm[α] * Aγξo[α, β]
+            end
         end
 
         for i in 1:nnodes
@@ -111,10 +121,19 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             for j in 1:nnodes
                 updateblock!(K_uu, dotdot(∇ϕ(i), Ee - DA, ∇ϕ(j)) * detJdV(fev, q_point), +, i, j)
                 for β in 1:nslip
-                    K_uξ⟂s_qp = -(∇ϕ(i) ⋅ DAγξos[β]) * (∇ϕ(j) ⋅ mp.s[β]) * detJdV(fev, q_point)
-                    K_ξ⟂su_qp = -∇ϕ(i) ⋅ Aγεs[β] * (∇ϕ(j) ⋅ mp.s[β]) * detJdV(fev, q_point)
-                    updateblock!(K_uξ⟂s[β], K_uξ⟂s_qp, +, i, j)
-                    updateblock!(K_ξ⟂su[β], K_ξ⟂su_qp, +, i, j)
+                    K_uξ⟂_qp = -(∇ϕ(i) ⋅ DAγξ⟂s[β]) * (∇ϕ(j) ⋅ mp.s[β]) * detJdV(fev, q_point)
+                    updateblock!(K_uξ⟂s[β], K_uξ⟂_qp, +, i, j)
+
+                    K_ξ⟂s_qp = -∇ϕ(i) ⋅ Aγεs[β] * (∇ϕ(j) ⋅ mp.s[β]) * detJdV(fev, q_point)
+                    updateblock!(K_ξ⟂su[β], K_ξ⟂s_qp, +, i, j)
+
+                    if dim == 3
+                        K_uξo_qp = -(∇ϕ(i) ⋅ DAγξos[β]) * (∇ϕ(j) ⋅ mp.l[β]) * detJdV(fev, q_point)
+                        updateblock!(K_uξos[β], K_uξo_qp, +, i, j)
+
+                        K_ξos_qp = -∇ϕ(i) ⋅ Aγεs[β] * (∇ϕ(j) ⋅ mp.l[β]) * detJdV(fev, q_point)
+                        updateblock!(K_ξosu[β], K_ξos_qp, +, i, j)
+                    end
                 end
             end
         end
@@ -132,21 +151,24 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             end
 
             for i in 1:nnodes
-                f_ξ⟂s[α][i] -= (g⟂_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.s[α]) * detJdV(fev, q_point)
+                f_ξ⟂s[α][i] += -(g⟂_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.s[α]) * detJdV(fev, q_point)
                 if dim == 3
-                    f_ξos[α][i] -= (go_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.l[α]) * detJdV(fev, q_point)
+                    f_ξos[α][i] += -(go_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.l[α]) * detJdV(fev, q_point)
                 end
                 for j in 1:nnodes
                     for β in 1:nslip
                         if α == β
-                            K_ξ⟂sξ⟂s[α, β][i,j] -= ϕ(i) / (mp.H⟂ * mp.lα^2) * ϕ(j) * detJdV(fev, q_point)
+                            K_ξ⟂sξ⟂s[α, β][i,j] += -ϕ(i) / (mp.H⟂ * mp.lα^2) * ϕ(j) * detJdV(fev, q_point)
                         end
-                        K_ξ⟂sξ⟂s[α, β][i,j] -=  ∇ϕ(i) ⋅ mp.s[β] * Aγξ⟂[β, α] * ∇ϕ(j) ⋅ mp.s[α] * detJdV(fev, q_point)
+                        K_ξ⟂sξ⟂s[α, β][i,j] += -∇ϕ(i) ⋅ mp.s[β] * Aγξ⟂[β, α] * ∇ϕ(j) ⋅ mp.s[α] * detJdV(fev, q_point)
                         if dim == 3
                             if α == β
-                            K_ξosξos[α, β][i,j] -= ϕ(i) / (mp.Ho * mp.lα^2) * ϕ(j) * detJdV(fev, q_point)
+                                K_ξosξos[α, β][i,j] += -ϕ(i) / (mp.Ho * mp.lα^2) * ϕ(j) * detJdV(fev, q_point)
                             end
-                            K_ξosξos[α, β][i,j] -= ∇ϕ(i) ⋅ mp.l[α] * Aγξ⟂[β, α] * ∇ϕ(j) ⋅ mp.l[α] * detJdV(fev, q_point)
+                            K_ξosξos[α, β][i,j] += -∇ϕ(i) ⋅ mp.l[α] * Aγξo[β, α] * ∇ϕ(j) ⋅ mp.l[α] * detJdV(fev, q_point)
+
+                            K_ξ⟂sξos[α, β][i,j] += -∇ϕ(i) ⋅ mp.s[α] * Aγξo[β, α] * ϕ(j) * detJdV(fev, q_point)
+                            K_ξosξ⟂s[α, β][i,j] += -∇ϕ(i) ⋅ mp.l[α] * Aγξ⟂[β, α] * ϕ(j) * detJdV(fev, q_point)
                         end
                     end
                 end
@@ -167,9 +189,23 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
     K[u◫, u◫] = K_uu
     for α in 1:nslip
         K[Block(Int(u◫) + α, Int(u◫))] = K_uξ⟂s[α]'
+
+
         K[Block(Int(u◫), Int(u◫) + α)] = K_ξ⟂su[α]
+
+        if dim == 3
+            K[Block(Int(u◫) + nslip + α, Int(u◫))] = K_uξos[α]'
+            K[Block(Int(u◫), Int(u◫) + α + nslip)] = K_ξosu[α]
+        end
         for β in 1:nslip
             K[Block(Int(u◫) + β, Int(u◫) + α)] = K_ξ⟂sξ⟂s[α, β]
+
+            if dim == 3
+                K[Block(Int(u◫) + β + nslip, Int(u◫) + α + nslip)] = K_ξosξos[α, β]
+
+                K[Block(Int(u◫) + α, Int(u◫) + β + nslip)] = K_ξ⟂sξos[α, β]
+                K[Block(Int(u◫) + α + nslip, Int(u◫) + β)] = K_ξosξ⟂s[α, β]
+            end
         end
     end
     end # inbounds

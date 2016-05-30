@@ -43,8 +43,9 @@ function solve_problem{dim}(problem::AbstractProblem, mesh, dofs, bcs, fe_values
             test_field[free] = primary_field[free] + ∆u
             K_condensed, f = assemble!(problem, K, test_field, prev_primary_field, fe_values,
                                        mesh, dofs, bcs, mp, mss, temp_mss, dt, Val{dofs_per_element})
-            ∆u -=  K_condensed \ f
-            println(norm(f))
+            ddx = K_condensed \ f
+            ∆u -= ddx
+            println("|f|: ", norm(f), " |ddx|: ", norm(ddx))
             iter += 1
             #@timer "factorization" ∆u -=  cholfact(Symmetric(K_condensed, :U)) \ f
         end

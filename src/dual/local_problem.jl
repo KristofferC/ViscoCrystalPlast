@@ -109,7 +109,7 @@ function solve_local_problem{T}(out::Vector{T}, problem::DualLocalProblem, ∆t,
     newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
 
 
-    return full(problem.inner)
+    return problem.inner
 end
 
 function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
@@ -121,7 +121,7 @@ function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
         update_problem!(problem, ∆t, mp, ms)
         res = norm(full(problem.R), Inf)
 
-        if res  <= 1e-7
+        if res  <= 1e-9
             break
         end
 

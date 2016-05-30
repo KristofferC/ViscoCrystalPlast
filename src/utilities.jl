@@ -32,22 +32,24 @@ end
 #end
 
 
-function ξ_dofs(dofs_u, nnodes, dofs_g, nslip, slip, ξtype::Symbol)
-    if ξtype == :ξo
-        offset = 1
-    elseif ξtype == :ξ⟂
+function compute_ξdofs(dofs_u, nnodes, dofs_g, nslip, slip, ξtype::Symbol)
+    @assert slip <= nslip
+    u_offset = nnodes * dofs_u
+    length = nnodes * dofs_g
+    ξ_offset = (slip - 1) * nnodes
+
+    if ξtype == :ξ⟂
         offset = 0
+    elseif ξtype == :ξo
+        offset = nslip  * nnodes
     else
         error("unknown ξ type")
     end
-    dofs = Int[]
-    count = dofs_u + (slip -1) * dofs_g
-    for i in 1:nnodes
-        push!(dofs, count+offset + 1)
-        count += dofs_u + nslip * dofs_g
-    end
-    return dofs
+    tot_offset = u_offset + ξ_offset + offset
+    return tot_offset + 1 : tot_offset + length
 end
+
+#ξ_dofs(3, 4, 1, 2, 1, :ξo)
 
 
 function extract!(a::AbstractArray, b::AbstractArray, c::AbstractArray)

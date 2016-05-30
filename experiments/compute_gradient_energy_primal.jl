@@ -156,6 +156,14 @@ function output{QD <: QuadratureData, dim}(pvd, time, timestep, filename, mesh, 
     tot_nodes = size(mesh.coords, 2)
     nrelem = size(mesh.topology, 2)
     vtkfile = vtk_grid(mesh.topology, mesh.coords, joinpath(dirname(@__FILE__), "vtks", "$filename" * "_$timestep"))
+    σs = reinterpret(Float64, [mss_nodes[i].σ for i in 1:tot_nodes])
+    println(tot_nodes)
+    println(typeof(σs))
+    println(size(σs))
+
+
+
+
 
     vtk_point_data(vtkfile, reinterpret(Float64, [mss_nodes[i].σ for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Stress")
     vtk_point_data(vtkfile, reinterpret(Float64, [mss_nodes[i].ε  for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Strain")
@@ -183,7 +191,7 @@ function output{QD <: QuadratureData, dim}(pvd, time, timestep, filename, mesh, 
     end
 
     vtk_point_data(vtkfile, disp, "displacement")
-    vtk_save(vtkfile)
+    #vtk_save(vtkfile)
 
     collection_add_timestep(pvd, vtkfile, time)
 

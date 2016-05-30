@@ -59,7 +59,7 @@ function PrimalProblem(nslips, fspace::JuAFEM.FunctionSpace)
 end
 
 include("primal/quadrature_data.jl")
-#include("primal/intf_primal.jl")
+include("primal/intf_primal.jl")
 include("primal/global_problem.jl")
 
 
@@ -78,7 +78,7 @@ end
 
 include("dual/local_problem.jl")
 include("dual/quadrature_data.jl")
-#include("dual/intf_dual.jl")
+include("dual/intf_dual.jl")
 include("dual/global_problem.jl")
 
 include("solve_problem.jl")
