@@ -44,7 +44,7 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
         for α in 1:nslip
             χ⟂[α] = function_scalar_gradient(fev, q_point, ξ⟂_nodes[α]) ⋅ mp.s[α]
             if dim == 3
-                χo[α] = function_scalar_gradient(fev, q_point, ξ⟂_nodes[α]) ⋅ mp.l[α]
+                χo[α] = function_scalar_gradient(fev, q_point, ξo_nodes[α]) ⋅ mp.l[α]
             end
         end
 
@@ -52,7 +52,7 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
         if dim == 2
             Y = [ε[1,1], ε[2,1], ε[1,2], ε[2,2], χ⟂[1], χ⟂[2]]
         else
-            Y =  [ε[1,1], ε[2,1], ε[3,1], ε[1,2], ε[2,2], ε[3,2], ε[1,3], ε[2,3], ε[3,3],  χ⟂[1], χ⟂[2], χo[1], χo[2]]
+            Y = [ε[1,1], ε[2,1], ε[3,1], ε[1,2], ε[2,2], ε[3,2], ε[1,3], ε[2,3], ε[3,3],  χ⟂[1], χ⟂[2], χo[1], χo[2]]
         end
         ms = mss[q_point]
         temp_ms = temp_mss[q_point]
@@ -151,7 +151,7 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             end
 
             for i in 1:nnodes
-                f_ξ⟂s[α][i] += -(g⟂_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.s[α]) * detJdV(fev, q_point)
+                f_ξ⟂s[α][i] += -(g⟂_gp * ϕ(i) +  ∇ϕ(i) ⋅ mp.s[α] * γ[α]) * detJdV(fev, q_point)
                 if dim == 3
                     f_ξos[α][i] += -(go_gp * ϕ(i) + γ[α] * ∇ϕ(i) ⋅ mp.l[α]) * detJdV(fev, q_point)
                 end
@@ -176,8 +176,7 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
         end
     end
 
-
-    f[u_dofs] = full(f_u)
+    f[u◫] = full(f_u)
     for α in 1:nslip
         if dim == 2
             f[ξ⟂s_dofs[α]] = f_ξ⟂s[α]

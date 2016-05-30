@@ -4,7 +4,7 @@ using ContMechTensors
 using JuAFEM
 using CALFEM
 using Parameters
-#using ForwardDiff
+using ForwardDiff
 using TimerOutputs
 using NearestNeighbors
 using GeometricalPredicates

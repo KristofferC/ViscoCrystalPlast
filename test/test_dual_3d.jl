@@ -69,17 +69,17 @@ end
 
 
 
-fe2(field) = ViscoCrystalPlast.intf(field, prev_field, e_coordinates,
+fe2(field) = ViscoCrystalPlast.intf_dual(field, prev_field, e_coordinates,
               fev, fe_u, fe_g, fe_g2, dt, mss, temp_mss, mp)
 
-f2, K2 = fe2(uu)
+f2 = fe2(uu)
 
-display(f2)
+#display(f2)
 
-#=
-dim = 2
-K_element = zeros(16,16)
-G = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{16}, Val{16})
+
+dim = 3
+K_element = zeros(28,28)
+G = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{28}, Val{28})
 
 nslip = length(mp.angles)
 
@@ -88,14 +88,14 @@ fe_gG = Vector{G}[zeros(G, 4) for i in 1:nslip]
 fe_gG2 = Vector{G}[zeros(G, 4) for i in 1:nslip]
 
 
-feg3(field) = ViscoCrystalPlast.intf(field, prev_field, e_coordinates,
+feg(field) = ViscoCrystalPlast.intf_dual(field, prev_field, e_coordinates,
               fev, fe_uG, fe_gG, fe_gG2, dt, mss, temp_mss, mp)
 
 
-println(f2)
 
 
-Ke! = ForwardDiff.jacobian(feg3, mutates = true, chunk_size = 16)
+
+Ke! = ForwardDiff.jacobian(feg, mutates = true, chunk_size = 28)
 
 Ke!(K_element, uu)
 
@@ -103,7 +103,7 @@ Ke!(K_element, uu)
 
  #print(K_element[ ViscoCrystalPlast.γ_dofs(2, 4, 1,2,1),ViscoCrystalPlast.u_dofs(2, 4, 1,2)])
 #   print(K_element)
-
+#=
 
 r = zeros(2*nslip)
 X = rand(2*nslip)
@@ -121,4 +121,5 @@ JX = ForwardDiff.jacobian(RX!, output_length = length(X))
 JX(Y)
 
 ViscoCrystalPlast.compute_residual!(r, X, Y, Δt, mp, mss)
+
 =#

@@ -3,16 +3,16 @@ using Parameters
 using JuAFEM
 using NLsolve
 
-include("local_problem.jl")
+#include("local_problem.jl")
 
-const problem = DualLocalProblem(2, Dim{2});
+const problem = DualLocalProblem(2, Dim{3});
 
 macro implement_jacobian(f, jacf)
-    const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{16}, Val{16})
-    const result = ForwardDiff.build_workvec(GG, 4)
-
-    #const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{28}, Val{28})
+    #const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
     #const result = ForwardDiff.build_workvec(GG, 4)
+
+    const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{28}, Val{28})
+    const result = ForwardDiff.build_workvec(GG, 4)
     return quote
         function $(esc(f)){G<:ForwardDiff.GradientNumber}(x::Vector{G})
             x_val = ForwardDiff.get_value(x)
@@ -35,7 +35,7 @@ end
 
 ################################################
 
-function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractArray{Q},
+function intf_dual{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractArray{Q},
                                                 x::AbstractArray{Q}, fev::FEValues{dim}, fe_u, fe_ξ⟂, fe_ξo, dt,
                                                 mss::AbstractVector{MS}, temp_mss::AbstractVector{MS}, mp::CrystPlastMP)
     @unpack mp: s, m, H⟂, Ee, sxm_sym, l
@@ -55,7 +55,7 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
         fill!(fe_ξ⟂_alpha, zero(T))
     end
     if dim == 3
-        for fe_ξo_alpha in fe_ξ⟂
+        for fe_ξo_alpha in fe_ξo
             fill!(fe_ξo_alpha, zero(T))
         end
     end
@@ -76,8 +76,8 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
         if dim == 2
             ξ⟂_node_dofs = compute_γdofs(dim, nnodes, ngradvars, nslip, α)
         else
-            ξ⟂_node_dofs = compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξ⟂)
-            ξo_node_dofs = compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξo)
+            ξ⟂_node_dofs = compute_ξdofs(dim, nnodes, 1, nslip, α, :ξ⟂)
+            ξo_node_dofs = compute_ξdofs(dim, nnodes, 1, nslip, α, :ξo)
         end
         ξ⟂_nodes[α] = a[ξ⟂_node_dofs]
         if dim == 3
@@ -97,7 +97,7 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
         for α in 1:nslip
             χ⟂[α] = function_scalar_gradient(fev, q_point, ξ⟂_nodes[α]) ⋅ mp.s[α]
             if dim == 3
-                χo[α] = function_scalar_gradient(fev, q_point, ξ⟂_nodes[α]) ⋅ mp.l[α]
+                χo[α] = function_scalar_gradient(fev, q_point, ξo_nodes[α]) ⋅ mp.l[α]
             end
         end
 
@@ -168,8 +168,8 @@ function intf{dim, T, Q, MS <:CrystPlastDualQD}(a::Vector{T}, prev_a::AbstractAr
         if dim == 2
             fe[compute_γdofs(dim, nnodes, ngradvars, nslip, α)] = reinterpret(T, fe_ξ⟂[α], (n_basefuncs,))
         else
-            fe[compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξ⟂)] = reinterpret(T, fe_ξ⟂[α], (n_basefuncs,))
-            fe[compute_ξdofs(dim, nnodes, ngradvars, nslip, α, :ξo)] = reinterpret(T, fe_ξo[α], (n_basefuncs,))
+            fe[compute_ξdofs(dim, nnodes, 1, nslip, α, :ξ⟂)] = reinterpret(T, fe_ξ⟂[α], (n_basefuncs,))
+            fe[compute_ξdofs(dim, nnodes, 1, nslip, α, :ξo)] = reinterpret(T, fe_ξo[α], (n_basefuncs,))
         end
     end
     return fe

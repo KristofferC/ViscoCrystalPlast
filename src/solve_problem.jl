@@ -72,27 +72,27 @@ function assemble!{dim, dofs_per_element}(problem, K::SparseMatrixCSC, primary_f
 
 
     f_int = zeros(length(dofs.dof_ids))
-  #  K_element = zeros(dofs_per_element, dofs_per_element)
+    K_element = zeros(dofs_per_element, dofs_per_element)
     e_coordinates = zeros(dim, n_basefuncs)
 
    # chunk_size = 20, needs to parameterize assemble according to chunk_size?
-  #  G = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{dofs_per_element}, Val{dofs_per_element})
+    G = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{dofs_per_element}, Val{dofs_per_element})
     nslip = length(mp.angles)
 
     # TODO: Refactor this into a type
-    #fe_u = [zero(Vec{dim, G}) for i in 1:n_basefuncs]
-    #fe_g = [zeros(G, n_basefuncs) for i in 1:nslip]
-    #fe_go = [zeros(G, n_basefuncs) for i in 1:nslip]
-    #fe_uF64 = [zero(Vec{dim, Float64}) for i in 1:n_basefuncs]
-    #fe_gF64 = [zeros(Float64, n_basefuncs) for i in 1:nslip]
-    #fe_goF64 = [zeros(Float64, n_basefuncs) for i in 1:nslip]
+    fe_u = [zero(Vec{dim, G}) for i in 1:n_basefuncs]
+    fe_g = [zeros(G, n_basefuncs) for i in 1:nslip]
+    fe_go = [zeros(G, n_basefuncs) for i in 1:nslip]
+    fe_uF64 = [zero(Vec{dim, Float64}) for i in 1:n_basefuncs]
+    fe_gF64 = [zeros(Float64, n_basefuncs) for i in 1:nslip]
+    fe_goF64 = [zeros(Float64, n_basefuncs) for i in 1:nslip]
 
-   #local prev_primary_element_field
-   #local ele_matstats
-   #local temp_matstats
+   local prev_primary_element_field
+   local ele_matstats
+   local temp_matstats
 
-  #  fe(field) = intf(field, prev_primary_element_field, e_coordinates, fe_values, fe_u, fe_g, fe_go, dt, ele_matstats, temp_matstats, mp)
-   # Ke! = ForwardDiff.jacobian(fe, mutates = true, chunk_size = dofs_per_element)
+    fe(field) = intf_dual(field, prev_primary_element_field, e_coordinates, fe_values, fe_u, fe_g, fe_go, dt, ele_matstats, temp_matstats, mp)
+    Ke! = ForwardDiff.jacobian(fe, mutates = true, chunk_size = dofs_per_element)
 
     for element_id in 1:size(mesh.topology, 2)
         edof = dofs_element(mesh, dofs, element_id)
@@ -104,12 +104,16 @@ function assemble!{dim, dofs_per_element}(problem, K::SparseMatrixCSC, primary_f
         ele_matstats = slice(mss, :, element_id)
         temp_matstats = slice(temp_mss, :, element_id)
 
-        fe_int, K_element = intf(problem, primary_element_field, prev_primary_element_field, e_coordinates,
-                  fe_values, dt, ele_matstats, temp_matstats, mp)
+        fe_int2 = intf_dual(primary_element_field, prev_primary_element_field, e_coordinates,
+                  fe_values, fe_uF64, fe_gF64, fe_goF64, dt, ele_matstats, temp_matstats, mp)
 
-       # _, allresults = Ke!(K_element, primary_element_field)
+       # fe_int, Ke = intf(problem, primary_element_field, prev_primary_element_field, e_coordinates,
+        #          fe_values, dt, ele_matstats, temp_matstats, mp)
 
-        assemble!(f_int, fe_int, edof)
+        _, allresults = Ke!(K_element, primary_element_field)
+
+
+        assemble!(f_int, fe_int2, edof)
         assemble!(K, K_element, edof)
 
     end
