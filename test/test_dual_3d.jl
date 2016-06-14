@@ -18,6 +18,13 @@ yy = rand(4)
 zz =rand(4)
 e_coordinates = [xx yy zz]'
 
+function rand_eul()
+    α = 2*(rand() - 0.5) * π
+    γ = 2*(rand() - 0.5) * π
+    β = rand() * π
+    return (α, γ, β)
+end
+
 function setup_material{dim}(::Type{Dim{dim}})
     E = 200000.0
     ν = 0.3
@@ -27,8 +34,9 @@ function setup_material{dim}(::Type{Dim{dim}})
     Ho = 0.1E
     C = 1.0e3
     tstar = 1000.0
-    angles = [20.0, 40.0]
-    mp = ViscoCrystalPlast.CrystPlastMP(Dim{dim}, E, ν, n, H⟂, Ho, lα, tstar, C, angles)
+    srand(1)
+    ϕs = [rand_eul() for i in 1:2]
+    mp = ViscoCrystalPlast.CrystPlastMP(Dim{dim}, E, ν, n, H⟂, Ho, lα, tstar, C, ϕs)
     return mp
 end
 

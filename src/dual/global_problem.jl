@@ -85,7 +85,6 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             end
         end
 
-
         A = consistent_tangent(Y, dual_prob.local_problem, dt, mp, ms, temp_ms)
 
         Aγε = A[γ◫, ε◫]
@@ -165,10 +164,10 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
                             if α == β
                                 K_ξosξos[α, β][i,j] += -ϕ(i) / (mp.Ho * mp.lα^2) * ϕ(j) * detJdV(fev, q_point)
                             end
-                            K_ξosξos[α, β][i,j] += -∇ϕ(i) ⋅ mp.l[α] * Aγξo[β, α] * ∇ϕ(j) ⋅ mp.l[α] * detJdV(fev, q_point)
+                            K_ξosξos[α, β][i,j] += -∇ϕ(i) ⋅ mp.l[β] * Aγξo[β, α] * ∇ϕ(j) ⋅ mp.l[α] * detJdV(fev, q_point)
 
-                            K_ξ⟂sξos[α, β][i,j] += -∇ϕ(i) ⋅ mp.s[α] * Aγξo[β, α] * ϕ(j) * detJdV(fev, q_point)
-                            K_ξosξ⟂s[α, β][i,j] += -∇ϕ(i) ⋅ mp.l[α] * Aγξ⟂[β, α] * ϕ(j) * detJdV(fev, q_point)
+                            K_ξ⟂sξos[α, β][i,j] += -∇ϕ(i) ⋅ mp.s[β] * Aγξo[β, α] * ∇ϕ(j) ⋅ mp.l[α] * detJdV(fev, q_point)
+                            K_ξosξ⟂s[α, β][i,j] += -∇ϕ(i) ⋅ mp.l[β] * Aγξ⟂[α, β] * ∇ϕ(j) ⋅ mp.s[α] * detJdV(fev, q_point)
                         end
                     end
                 end
@@ -202,8 +201,8 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             if dim == 3
                 K[Block(Int(u◫) + β + nslip, Int(u◫) + α + nslip)] = K_ξosξos[α, β]
 
-                K[Block(Int(u◫) + α, Int(u◫) + β + nslip)] = K_ξ⟂sξos[α, β]
-                K[Block(Int(u◫) + α + nslip, Int(u◫) + β)] = K_ξosξ⟂s[α, β]
+                K[Block(Int(u◫) + β, Int(u◫) + α + nslip)] = K_ξ⟂sξos[α, β]
+                K[Block(Int(u◫) + β + nslip, Int(u◫) + α)] = K_ξosξ⟂s[α, β]
             end
         end
     end

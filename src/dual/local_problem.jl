@@ -108,7 +108,8 @@ function solve_local_problem{T}(out::Vector{T}, problem::DualLocalProblem, ∆t,
 
     newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
 
-
+    temp_ms.τ_di = copy(problem.inner[τ◫])
+    temp_ms.γ = copy(problem.inner[γ◫])
     return problem.inner
 end
 
@@ -130,26 +131,32 @@ function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
             problem.inner[i] -= problem.R[i]
         end
         if n_iters == max_iters
+
             error("Non conv mat")
         end
         n_iters +=1
     end
 end
 
-#=
+
 function foo()
     srand(1234)
     nslip = 2
-    dim = 2
-    a = rand(dim == 2? 4 : 9);
-    b = rand(nslip);
-    c = rand(nslip);
-    d =  rand(nslip);
+    dim = 3
+    ε = rand(dim == 2? 4 : 9);
+    χ⟂ = rand(nslip);
+    χo = rand(nslip);
+    γ =  rand(nslip);
+    τ =  rand(nslip);
 
     problem = ViscoCrystalPlast.DualLocalProblem(nslip, Dim{dim});
-    out = [a; b] #rand(dim == 2? 4 : 9);
-    problem.inner[γ◫] = c; #rand(nslip);
-    problem.inner[τ◫] = d; #rand(nslip);
+    if dim == 2
+        out = [ε; χ⟂]
+    else
+        out = [ε; χ⟂; χo]
+    end
+    problem.inner[γ◫] = γ;
+    problem.inner[τ◫] = τ;
 
     mp = setup_material(Dim{dim});
     ms = ViscoCrystalPlast.CrystPlastDualQD(nslip, Dim{dim});
@@ -160,16 +167,17 @@ function foo()
     #copy!(full(problem.inner), X)
     temp_ms.γ = problem.inner[γ◫]
     temp_ms.τ_di = problem.inner[τ◫]
-    @time for i in 1:10^5
-        ViscoCrystalPlast.solve_local_problem(out, problem, 0.1, mp, ms, temp_ms)
-    end
+    ViscoCrystalPlast.consistent_tangent(out, problem, 0.1, mp, ms, temp_ms)
+  # @time for i in 1:10^5
+  #     ViscoCrystalPlast.solve_local_problem(out, problem, 0.1, mp, ms, temp_ms)
+  # end
 
 
-    @time for i in 1:10^5
-        update_problem!(problem, 0.1, mp, ms)
-        consistent_tangent(out, 0.1, mp, temp_ms, problem)
-    end
+  # @time for i in 1:10^5
+  #     update_problem!(problem, 0.1, mp, ms)
+  #     consistent_tangent(out, 0.1, mp, temp_ms, problem)
+  # end
 
 
 end
-=#
+

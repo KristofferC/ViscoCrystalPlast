@@ -19,7 +19,8 @@ immutable CrystPlastMP{dim, T, M, N}
 end
 
 
-function CrystPlastMP{T, dim}(::Type{Dim{dim}}, E::T, ν::T, n::T, H⟂::T, Ho::T, lα::T, tstar::T, C::T, angles::Vector{T})
+function CrystPlastMP{T}(::Type{Dim{2}}, E::T, ν::T, n::T, H⟂::T, Ho::T, lα::T, tstar::T, C::T, angles::Vector{T})
+    dim = 2
     nslip = length(angles)
     sxm_sym = SymmetricTensor{2, dim}[]
     s = Vector{Vec{dim, T}}(nslip)
@@ -47,4 +48,36 @@ function CrystPlastMP{T, dim}(::Type{Dim{dim}}, E::T, ν::T, n::T, H⟂::T, Ho::
     Esm = typeof(Ee ⊡ sxm_sym[1])[Ee ⊡ sxm_sym[α] for α in 1:nslip]
 
     CrystPlastMP(E, Ee, ν, n, H⟂, Ho, Hgrad, lα, tstar, C, angles, sxm_sym, Dαβ, Esm, s, m, l)
+end
+
+
+
+function CrystPlastMP{T}(::Type{Dim{3}}, E::T, ν::T, n::T, H⟂::T, Ho::T, lα::T, tstar::T, C::T, ϕs::Vector{NTuple{3, T}})
+    dim = 3
+    nslip = length(ϕs)
+    sxm_sym = SymmetricTensor{2, dim}[]
+    s = Vector{Vec{dim, Float64}}(nslip)
+    m = Vector{Vec{dim, Float64}}(nslip)
+    l = Vector{Vec{dim, Float64}}(nslip)
+
+    for α = 1:nslip
+        ϕ = ϕs[α]
+        Q = tformrotate([0,0,1], ϕ[3]) * tformrotate([0,1,0], ϕ[2]) * tformrotate([1,0,0], ϕ[1])
+        s[α] = Tensor{1, 3}(Q * [1,0,0])
+        m[α] = Tensor{1, 3}(Q * [0,1,0])
+        l[α] = Tensor{1, 3}(Q * [0,0,1])
+    end
+
+    λ = E*ν / ((1+ν) * (1 - 2ν))::Float64
+    μ = E / (2(1+ν))::Float64
+    δ(i,j) = i == j ? 1.0 : 0.0
+    f(i,j,k,l) = λ*δ(i,j)*δ(k,l) + μ*(δ(i,k)*δ(j,l) + δ(i,l) * δ(j,k))
+    Ee = SymmetricTensor{4, dim}(f)
+
+    sxm_sym = [symmetric(s[α] ⊗ m[α]) for α in 1:nslip]
+    Hgrad = [symmetric(H⟂ * s[α] ⊗ s[α] + Ho * l[α] ⊗ l[α]) for α in 1:nslip]
+    Dαβ = Float64[(Ee ⊡ sxm_sym[α]) ⊡ sxm_sym[β] for α in 1:nslip, β in 1:nslip]
+    Esm = typeof(Ee ⊡ sxm_sym[1])[Ee ⊡ sxm_sym[α] for α in 1:nslip]
+
+    CrystPlastMP(E, Ee, ν, n, H⟂, Ho, Hgrad, lα, tstar, C, zeros(nslip), sxm_sym, Dαβ, Esm, s, m, l)
 end

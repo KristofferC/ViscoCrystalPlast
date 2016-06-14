@@ -5,14 +5,14 @@ using NLsolve
 
 #include("local_problem.jl")
 
-const problem = DualLocalProblem(2, Dim{3});
+const problem = DualLocalProblem(2, Dim{2});
 
 macro implement_jacobian(f, jacf)
-    #const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
-    #const result = ForwardDiff.build_workvec(GG, 4)
-
-    const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{28}, Val{28})
+    const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
     const result = ForwardDiff.build_workvec(GG, 4)
+
+    #const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{28}, Val{28})
+    #const result = ForwardDiff.build_workvec(GG, 4)
     return quote
         function $(esc(f)){G<:ForwardDiff.GradientNumber}(x::Vector{G})
             x_val = ForwardDiff.get_value(x)

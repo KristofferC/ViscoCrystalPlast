@@ -131,6 +131,9 @@ end
 function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
     @unpack mp: C, tstar, n
     Δγ = γ_gp - γ_gp_prev
+    if Δγ < 0
+     Δγ = 0.000001
+    end
     C * (tstar / ∆t)^(1/n) * 1/n * Δγ^(1/n - 1) * Δγ / abs(Δγ)
 end
 

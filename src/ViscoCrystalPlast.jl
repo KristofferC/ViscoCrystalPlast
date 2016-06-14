@@ -9,6 +9,7 @@ using TimerOutputs
 using NearestNeighbors
 using GeometricalPredicates
 using BlockArrays
+using AffineTransforms
 
 const DEBUG = true
 
@@ -44,6 +45,8 @@ include("mesh.jl")
 include("boundary_conditions.jl")
 include("sparse_tools.jl")
 include("mesh_transfer.jl")
+
+include("mesh_readers/mesh_reader.jl")
 
 include("utilities.jl")
 

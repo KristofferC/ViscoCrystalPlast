@@ -1,4 +1,5 @@
-function solve_problem{dim}(problem::AbstractProblem, mesh, dofs, bcs, fe_values::FEValues{dim}, mp, timesteps, boundary_f, exporter)
+function solve_problem{dim}(problem::AbstractProblem, mesh, dofs, bcs, fe_values::FEValues{dim}, mps, timesteps, boundary_f, exporter, polys)
+    mp = mps[1]
     free = setdiff(dofs.dof_ids, bcs.dof_ids)
 
     K = create_sparsity_pattern(mesh, dofs)
@@ -42,7 +43,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh, dofs, bcs, fe_values
 
             test_field[free] = primary_field[free] + ∆u
             K_condensed, f = assemble!(problem, K, test_field, prev_primary_field, fe_values,
-                                       mesh, dofs, bcs, mp, mss, temp_mss, dt, Val{dofs_per_element})
+                                       mesh, dofs, bcs, mps, mss, temp_mss, dt, Val{dofs_per_element}, polys)
             ddx = K_condensed \ f
             ∆u -= ddx
             println("|f|: ", norm(f), " |ddx|: ", norm(ddx))
@@ -62,7 +63,8 @@ end
 
 function assemble!{dim, dofs_per_element}(problem, K::SparseMatrixCSC, primary_field::Vector, prev_primary_field::Vector,
                         fe_values::FEValues{dim}, mesh::GeometryMesh, dofs::Dofs,
-                        bcs::DirichletBoundaryConditions, mp, mss, temp_mss, dt, ::Type{Val{dofs_per_element}})
+                        bcs::DirichletBoundaryConditions, mps, mss, temp_mss, dt, ::Type{Val{dofs_per_element}}, polys)
+    mp = mps[1]
 
     @assert length(primary_field) == length(dofs.dof_ids)
     fill!(K.nzval, 0.0)
@@ -104,17 +106,17 @@ function assemble!{dim, dofs_per_element}(problem, K::SparseMatrixCSC, primary_f
         ele_matstats = slice(mss, :, element_id)
         temp_matstats = slice(temp_mss, :, element_id)
 
-        fe_int2 = intf_dual(primary_element_field, prev_primary_element_field, e_coordinates,
-                  fe_values, fe_uF64, fe_gF64, fe_goF64, dt, ele_matstats, temp_matstats, mp)
+        #fe_int2 = intf_dual(primary_element_field, prev_primary_element_field, e_coordinates,
+        #          fe_values, fe_uF64, fe_gF64, fe_goF64, dt, ele_matstats, temp_matstats, mp)
 
-       # fe_int, Ke = intf(problem, primary_element_field, prev_primary_element_field, e_coordinates,
-        #          fe_values, dt, ele_matstats, temp_matstats, mp)
+        fe_int, Ke = intf(problem, primary_element_field, prev_primary_element_field, e_coordinates,
+                  fe_values, dt, ele_matstats, temp_matstats, mps[polys[element_id]])
 
-        _, allresults = Ke!(K_element, primary_element_field)
+        #_, allresults = Ke!(K_element, primary_element_field)
 
 
-        assemble!(f_int, fe_int2, edof)
-        assemble!(K, K_element, edof)
+        assemble!(f_int, fe_int, edof)
+        assemble!(K, Ke, edof)
 
     end
 
