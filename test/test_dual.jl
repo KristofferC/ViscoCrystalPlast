@@ -9,7 +9,7 @@ prev_field = similar(uu)
 
 xx = [ 0.05  0.1   0.1  0.05]
 yy = [ 0.05  0.05  0.1  0.1  ]
-e_coordinates = [xx yy]'
+e_coordinates = [xx; yy]
 
 function setup_material{dim}(::Type{Dim{dim}})
     E = 200000.0
@@ -62,15 +62,17 @@ for i in 1:16
   uu[i] -= h
 end
 
-fe2(field) = ViscoCrystalPlast.intf(field, prev_field, e_coordinates,
+e_coordsvec = [Vec{2}(e_coordinates[:, i]) for i in 1:3]
+
+fe2(field) = ViscoCrystalPlast.intf_dual(field, prev_field, e_coordinates,
               fev, fe_u, fe_g, fe_g2, dt, mss, temp_mss, mp)
 
 
 
-
 dim = 2
-K_element = zeros(16,16)
-G = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{16}, Val{16})
+N = 16
+K_element = zeros(N,N)
+G = ForwardDiff.Dual{N,Float64}
 
 nslip = length(mp.angles)
 
@@ -85,7 +87,7 @@ feg3(field) = ViscoCrystalPlast.intf_dual(field, prev_field, e_coordinates,
 
 
 
-Ke! = ForwardDiff.jacobian(feg3, mutates = true, chunk_size = 16)
+Ke! = (K, u) -> ForwardDiff.jacobian!(K, feg3, u)
 
 Ke!(K_element, uu)
 #

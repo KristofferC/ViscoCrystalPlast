@@ -37,7 +37,9 @@ temp_mss = [ViscoCrystalPlast.CrystPlastPrimalQD(nslip, Dim{2}) for i = 1:n_qpoi
 
 primal_prob = ViscoCrystalPlast.PrimalProblem(nslip, function_space)
 
-fe(field) = ViscoCrystalPlast.intf(primal_prob, field, prev_prim_field, e_coordinates,
+e_coordsvec = [Vec{2}(e_coordinates[:, i]) for i in 1:3]
+
+fe(field) = ViscoCrystalPlast.intf(primal_prob, field, prev_prim_field, e_coordsvec,
               fe_values, dt, mss, temp_mss, mp)
 
 prim_field = ones(12)
@@ -48,14 +50,14 @@ fe_u = Vec{2, Float64}[zero(Vec{2, Float64}) for i in 1:3]
 fe_g = Vector{Float64}[zeros(Float64, 3) for i in 1:nslip]
 fe_g2 = Vector{Float64}[zeros(Float64, 3) for i in 1:nslip]
 
-feg2(field) = ViscoCrystalPlast.intf(field, prev_prim_field, e_coordinates,
+feg2(field) = ViscoCrystalPlast.intf(field, prev_prim_field, e_coordsvec,
               fe_values, fe_u, fe_g, fe_g2, dt, mss, temp_mss, mp)
 
 feg2(prim_field)
 
 dim = 2
 K_element = zeros(12,12)
-G = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
+G = ForwardDiff.Dual{12, Float64}
 
 nslip = length(mp.angles)
 
@@ -63,12 +65,12 @@ fe_uG = Vec{dim, G}[zero(Vec{dim, G}) for i in 1:3]
 fe_gG = Vector{G}[zeros(G, 3) for i in 1:nslip]
 fe_gG2 = Vector{G}[zeros(G, 3) for i in 1:nslip]
 
-feg(field) = ViscoCrystalPlast.intf(field, prev_prim_field, e_coordinates,
+feg(field) = ViscoCrystalPlast.intf(field, prev_prim_field, e_coordsvec,
               fe_values, fe_uG, fe_gG, fe_gG2, dt, mss, temp_mss, mp)
 
 
 
-Ke! = ForwardDiff.jacobian(feg, mutates = true, chunk_size = 12)
+Ke! = (K, u) -> ForwardDiff.jacobian!(K, feg, u)
 
 @time for i in 1:10^4
   fe(prim_field)

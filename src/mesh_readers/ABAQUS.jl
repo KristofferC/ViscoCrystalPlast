@@ -29,24 +29,10 @@ function to_viscomesh(am::AbaqusMesh)
 
     topology = zeros(Int, 4, length(eles))
     for i in 1:length(eles)
-
         topology[:, i] = eles[i].topology
     end
 
-    boundary_nodes = Int[]
-    for (k, v) in am.node_sets
-        append!(boundary_nodes, v)
-    end
-    boundary_nodes = unique(boundary_nodes)
 
-    polytype = zeros(Int, length(eles))
-    for (k, v) in am.element_sets
-        id = parse(Int, k[5:end])
-        for e in v
-            @assert polytype[e] == 0
-            polytype[e] = id
-        end
-    end
 
     return GeometryMesh(coords, topology, boundary_nodes), polytype
 

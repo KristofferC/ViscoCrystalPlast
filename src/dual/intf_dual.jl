@@ -8,30 +8,31 @@ using NLsolve
 const problem = DualLocalProblem(2, Dim{2});
 
 macro implement_jacobian(f, jacf)
-    const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{12}, Val{12})
-    const result = ForwardDiff.build_workvec(GG, 4)
+    const N_INPUT = 6
+    const N_OUTPUT = 4
+    const CHUNK = 16
+    const jacobian = zeros(N_INPUT, CHUNK)
+    const result = Vector{ForwardDiff.Dual{CHUNK,Float64}}(N_OUTPUT)
 
-    #const GG = ForwardDiff.workvec_eltype(ForwardDiff.GradientNumber, Float64, Val{28}, Val{28})
-    #const result = ForwardDiff.build_workvec(GG, 4)
     return quote
-        function $(esc(f)){G<:ForwardDiff.GradientNumber}(x::Vector{G})
-            x_val = ForwardDiff.get_value(x)
+        function $(esc(f)){D<:ForwardDiff.Dual}(x::Vector{D})
+            x_val = [ForwardDiff.value(z) for z in x]
             f_val, J = $(f)(x_val), $(jacf)(x_val)
-            J_new = J * ForwardDiff.get_jacobian(x)
-
+            ForwardDiff.load_jacobian!($jacobian, x)
+            J_new = J * $jacobian
             @assert length(f_val) == $(length(result))
-
             for i in eachindex(f_val)
-                $result[i] = G(f_val[i], getrowpartials(G, J_new, i))
+                $result[i] = D(f_val[i], ForwardDiff.Partials(getrowpartials(D, J_new, i)))
             end
             return $result
         end
     end
 end
 
-@generated function getrowpartials{G<:ForwardDiff.GradientNumber}(::Type{G}, J, i)
+@generated function getrowpartials{G<:ForwardDiff.Dual}(::Type{G}, J, i)
     return Expr(:tuple, [:(J[i, $k]) for k=1:ForwardDiff.npartials(G)]...)
 end
+
 
 ################################################
 

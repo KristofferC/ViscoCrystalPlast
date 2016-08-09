@@ -1,10 +1,11 @@
 import Base.Order.Forward
 
-function create_sparsity_pattern(mesh, dofs)
+function create_sparsity_pattern(dh::DofHandler)
+    mesh = dh.mesh
     I = Int[]
     J = Int[]
-    for element_id in 1:size(mesh.topology, 2)
-        edof = dofs_element(mesh, dofs, element_id)
+    for element_id in 1:nelements(mesh)
+        edof = dofs_element(dh, element_id)
         n_dofs = length(edof)
         for dof1 in 1:n_dofs, dof2 in 1:n_dofs
             push!(J, edof[dof1])
@@ -16,7 +17,37 @@ function create_sparsity_pattern(mesh, dofs)
     return K
 end
 
-function assemble!(K::SparseMatrixCSC, Ke::Matrix, dofs::Vector{Int})
+function create_lookup(A::SparseMatrixCSC, dh::DofHandler)
+    mesh = dh.mesh
+    dofs_per_ele = length(dofs_element(dh, 1))
+    lookup_table = zeros(Int,  dofs_per_ele^2, nelements(mesh))
+    for element_id in 1:nelements(mesh)
+        k = 1
+        edof = dofs_element(dh, element_id)
+        n_dofs = length(edof)
+        for i0 in 1:n_dofs, i1 in 1:n_dofs
+
+            r1 = Int(A.colptr[edof[i1]])
+            r2 = Int(A.colptr[edof[i1]+1]-1)
+            i = (r1 > r2) ? r1 : searchsortedfirst(A.rowval, edof[i0], r1, r2, Forward)
+            lookup_table[k, element_id] = i
+            k += 1
+        end
+    end
+    return lookup_table
+end
+
+function assemble!(K::SparseMatrixCSC, Ke::Matrix, element::Int, lookup_table::Matrix{Int})
+    k = 1
+    ndofs_per_ele = Int(sqrt(size(lookup_table, 1)))
+    @inbounds for loc1 in 1:ndofs_per_ele, loc2 in 1:ndofs_per_ele
+        lin_idx = lookup_table[k, element]
+        k += 1
+        K.nzval[lin_idx] += Ke[loc1, loc2]
+    end
+end
+
+function assemble!(K::SparseMatrixCSC, Ke::Matrix, dofs::AbstractVector)
     for (loc1, glob1) in enumerate(dofs)
         for (loc2, glob2) in enumerate(dofs)
             add!(K, Ke[loc1, loc2], glob1, glob2)
@@ -24,7 +55,7 @@ function assemble!(K::SparseMatrixCSC, Ke::Matrix, dofs::Vector{Int})
     end
 end
 
-function assemble!(f::Vector{Float64}, fe::Vector{Float64}, dofs::Vector{Int})
+function assemble!(f::Vector{Float64}, fe::Vector{Float64}, dofs::AbstractVector)
     for (loc, glob) in enumerate(dofs)
         f[glob] += fe[loc]
     end

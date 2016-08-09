@@ -7,11 +7,17 @@ using Parameters
 using ForwardDiff
 using TimerOutputs
 using NearestNeighbors
-using GeometricalPredicates
+#using GeometricalPredicates
 using BlockArrays
 using AffineTransforms
+using FileIO
+using MeshIO
 
-const DEBUG = true
+import JuAFEM.vtk_point_data
+
+abstract AbstractProblem
+
+DEBUG = true
 
 if DEBUG
     @eval begin
@@ -31,22 +37,18 @@ else
     end
 end
 
-abstract AbstractProblem
-
-
-import ForwardDiff.GradientNumber
 
 abstract QuadratureData
 
-include("ComsolMeshReader.jl")
 include("material_parameters.jl")
 
 include("mesh.jl")
+include("ComsolMeshReader.jl")
 include("boundary_conditions.jl")
 include("sparse_tools.jl")
 include("mesh_transfer.jl")
 
-include("mesh_readers/mesh_reader.jl")
+#include("mesh_readers/mesh_reader.jl")
 
 include("utilities.jl")
 

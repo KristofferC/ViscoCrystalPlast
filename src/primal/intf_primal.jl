@@ -1,4 +1,4 @@
-function intf{dim, func_space, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space}, fe_u, fe_g, _,
+function intf{dim, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim}, fe_u, fe_g, _,
                             dt, mss, temp_mss, mp::CrystPlastMP)
 
 
@@ -12,8 +12,8 @@ function intf{dim, func_space, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, 
     @assert length(a) == nnodes * (dim + ngradvars * nslip)
     @assert length(a_prev) == nnodes * (dim + ngradvars * nslip)
 
-    x_vec = reinterpret(Vec{dim, Q}, x, (n_basefuncs,))
-    reinit!(fev, x_vec)
+    #x_vec = reinterpret(Vec{dim, Q}, x, (n_basefuncs,))
+    reinit!(fev, x)
 
     fill!(fe_u, zero(Vec{dim, T}))
     for fe_g_alpha in fe_g

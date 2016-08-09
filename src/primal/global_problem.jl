@@ -1,7 +1,7 @@
 
 
 function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(primal_prob::PrimalProblem,
-                           a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim, Q, func_space},
+                           a::Vector{T}, a_prev, x::Vector, fev::FEValues{dim, Q, func_space},
                             dt, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP)
 
 
@@ -24,8 +24,8 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(primal_prob::Prim
     @assert length(a) == nnodes * (dim + ngradvars * nslip)
     @assert length(a_prev) == nnodes * (dim + ngradvars * nslip)
 
-    x_vec = reinterpret(Vec{dim, Q}, x, (nnodes,))
-    reinit!(fev, x_vec)
+    #x_vec = reinterpret(Vec{dim, Q}, x, (nnodes,))
+    reinit!(fev, x)
     reset!(glob_prob)
 
     extract!(u_nodes, a, u_dofs)
@@ -131,10 +131,7 @@ end
 function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
     @unpack mp: C, tstar, n
     Δγ = γ_gp - γ_gp_prev
-    if Δγ < 0
-     Δγ = 0.000001
-    end
-    C * (tstar / ∆t)^(1/n) * 1/n * Δγ^(1/n - 1) * Δγ / abs(Δγ)
+    C * (tstar / ∆t)^(1/n) * 1/n * abs(Δγ)^(1/n - 1)
 end
 
 

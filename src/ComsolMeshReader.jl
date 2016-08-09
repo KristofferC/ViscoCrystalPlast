@@ -1,6 +1,5 @@
 # Functionality for reading a mesh from COMSOL
 # Currently only 1 object, no geometric entity information
-module ComsolMeshReader
 
 using Compat
 
@@ -16,6 +15,30 @@ end
 type LineFeeder
     file::IOStream
     next_line::String
+end
+
+function GeometryMesh{dim}(mesh::ComsolMesh{dim})
+    coordinates = mesh.coordinates
+    n_nodes = length(coordinates)
+    if dim == 2
+        tri_elements = mesh.elements["3 tri"]
+        boundary_elements = mesh.elements["3 edg"]
+        nnodes = 3
+        topology = reinterpret(Int, tri_elements, (nnodes, length(tri_elements)))
+    elseif dim == 3
+        tri_elements = mesh.elements["3 tet"]
+        boundary_elements = mesh.elements["3 tri"]
+        nnodes = 4
+        topology = reinterpret(Int, tri_elements, (nnodes, length(tri_elements)))
+    end
+
+    boundary_nodes = unique(reinterpret(Int, boundary_elements, (dim*length(boundary_elements),)))
+    coords_vec = reinterpret(Vec{dim, Float64}, coordinates, (length(coordinates),))
+    node_set = Dict("boundary nodes" => boundary_nodes)
+    element_set = Dict{String, Vector{Int}}()
+    mesh = GeometryMesh(coords_vec, topology, node_set, element_set)
+
+   return mesh
 end
 
 LineFeeder(f::IOStream) = LineFeeder(f, readline(f))
@@ -143,6 +166,4 @@ function read_mphtxt(filename, verbosity::Int=0)
     end
 
     return ComsolMesh(version, sdim, coords, elements)
-end
-
 end

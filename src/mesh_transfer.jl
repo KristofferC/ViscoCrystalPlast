@@ -1,20 +1,18 @@
 function move_quadrature_data_to_nodes{QD <: QuadratureData, dim}(quad_data::AbstractVecOrMat{QD}, mesh, quad_rule::QuadratureRule{dim})
-    tot_nodes = size(mesh.coords, 2)
-    nrelem = size(mesh.topology, 2)
     nslips = length(quad_data[1,1].τ)
 
-    quad_data_nodes = [get_type(QD)(nslips, Dim{dim}) for i = 1:tot_nodes]
-    count_nodes = zeros(Int, tot_nodes)
-    for i in 1:nrelem
+    quad_data_nodes = [get_type(QD)(nslips, Dim{dim}) for i = 1:nnodes(mesh)]
+    count_nodes = zeros(Int, nnodes(mesh))
+    for i in 1:nelements(mesh)
         for q_point in 1:length(points(quad_rule))
-            for node in mesh.topology[:, i]
+            for node in element_vertices(mesh, i)
                 count_nodes[node] += 1
                 quad_data_nodes[node] += quad_data[q_point, i]
             end
         end
     end
 
-    for i in 1:tot_nodes
+    for i in 1:nnodes(mesh)
         quad_data_nodes[i] /= count_nodes[i]
     end
 
@@ -22,7 +20,7 @@ function move_quadrature_data_to_nodes{QD <: QuadratureData, dim}(quad_data::Abs
 end
 
 
-
+#=
 typealias TrigType GeometricalPredicates.UnOrientedTriangle{GeometricalPredicates.Point2D}
 
 function get_global_gauss_point_coordinates{dim, T}(fe_values::FEValues{dim, T}, mesh)
@@ -261,7 +259,7 @@ function check_in_triangle(t, p)
     end
 end
 
-#=
+
 function interpolate_to_quads{QD <: QuadratureData}(solution_coarse_nodes, quad_data_coarse::AbstractVector{QD}, coarse_mesh,
                                                     fine_mesh, dofs_coarse, dofs_fine, gp_coords, func_space)
     dim = 2

@@ -1,103 +1,211 @@
-immutable GeometryMesh
-    coords::Matrix{Float64}
+
+import MeshIO.AbaqusMesh
+import JuAFEM.vtk_grid
+
+immutable GeometryMesh{dim}
+    coords::Vector{Vec{dim, Float64}}
     topology::Matrix{Int}
-    boundary_nodes::Vector{Int}
+    element_sets::Dict{String, Vector{Int}}
+    node_sets::Dict{String, Vector{Int}}
 end
 
-function element_coordinates(gm::GeometryMesh, ele::Int)
-    dim = size(gm.coords, 1)
-    n_nodes = size(gm.topology, 1)
-    element_coordinates!(zeros(dim, n_nodes), gm, ele)
+nnodes(m::GeometryMesh) = length(m.coords)
+nelements(m::GeometryMesh) = size(m.topology, 2)
+
+element_set(m::GeometryMesh, s::String) = m.element_sets[s]
+add_element_set!(m::GeometryMesh, s::String, v::Vector{Int}) = m.element_sets[s] = v
+add_node_set!(m::GeometryMesh, s::String, v::Vector{Int}) = m.node_sets[s] = v
+node_set(m::GeometryMesh, s::String) = m.node_sets[s]
+
+function GeometryMesh(mesh::AbaqusMesh, element_type::String)
+    c = mesh.nodes.coordinates
+    dim_sum = sumabs2(c, 2)
+    if dim_sum[2] == 0.0
+        dim = 1
+    elseif dim_sum[3] == 0.0
+        dim = 2
+    else
+        dim = 3
+    end
+
+    nnodes = size(c, 2)
+    coords = reinterpret(Vec{dim, Float64}, c[1:dim, :], (nnodes,) )
+
+    GeometryMesh(copy(coords), copy(mesh.elements[element_type].topology),
+                 mesh.element_sets, mesh.node_sets)
 end
 
-function element_coordinates!(coords::Matrix{Float64}, gm::GeometryMesh, ele::Int)
-    dim = size(gm.coords, 1)
+
+function vtk_grid{dim}(mesh::GeometryMesh{dim}, filename)
+    c_mat = reinterpret(Float64, mesh.coords, (dim, length(mesh.coords)))
+    JuAFEM.vtk_grid(mesh.topology, c_mat, filename)
+end
+
+function element_coordinates{dim}(gm::GeometryMesh{dim}, ele::Int)
     n_nodes = size(gm.topology, 1)
-    @assert size(coords) == (dim, n_nodes)
+    c = [zero(Vec{dim, Float64}) for i in 1:n_nodes]
+    element_coordinates!(c, gm, ele)
+end
+
+function element_coordinates!{dim}(coords::Vector{Vec{dim, Float64}}, gm::GeometryMesh, ele::Int)
+    n_nodes = size(gm.topology, 1)
+    @assert length(coords) == n_nodes
     for i in 1:n_nodes
-        coords[:, i] = gm.coords[:, gm.topology[i, ele]]
+        coords[i] = gm.coords[gm.topology[i, ele]]
     end
     return coords
 end
 
+function node_coordinates(gm::GeometryMesh, node::Int)
+    return gm.coords[node]
+end
 
-function create_mesh(mesh_file::AbstractString)
-    mesh = ComsolMeshReader.read_mphtxt(mesh_file)
-    modify_mesh(mesh)
+function element_vertices(gm::GeometryMesh, element::Int)
+    return gm.topology[:, element]
 end
 
 
 
-function modify_mesh(mesh)
-    dim = mesh.space_dim
-    coordinates = mesh.coordinates
-    n_nodes = length(coordinates)
-    if dim == 2
-        tri_elements = mesh.elements["3 tri"]
-        boundary_elements = mesh.elements["3 edg"]
-        nnodes = 3
-        topology = reinterpret(Int, tri_elements, (nnodes, length(tri_elements)))
-    elseif dim == 3
-        tri_elements = mesh.elements["3 tet"]
-        boundary_elements = mesh.elements["3 tri"]
-        nnodes = 4
-        topology = reinterpret(Int, tri_elements, (nnodes, length(tri_elements)))
+#function node_neighboring_elements(mesh)
+#    neighboring_elements = [Set{Int}() for i in 1:size(mesh.coords, 2)]
+#
+#    for e in 1:size(mesh.topology, 2)
+#        for node in mesh.topology[:, e]
+#            push!(neighboring_elements[node], e)
+#        end
+#    end
+#    return neighboring_elements
+#end
+
+type DofHandler{dim}
+    dofs_nodes::Matrix{Int}
+    dofs_elements::Matrix{Int}
+    field_names::Vector{Symbol}
+    dof_dims::Vector{Int}
+    closed::Bool
+    dofs_vec::Vector{Int}
+    mesh::GeometryMesh{dim}
+end
+
+function DofHandler(m::GeometryMesh)
+    DofHandler(Matrix{Int}(), Matrix{Int}(), Symbol[], Int[], false, Int[], m)
+end
+ndofs(dh::DofHandler) = length(dh.dofs_nodes)
+isclosed(dh::DofHandler) = dh.closed
+dofs_node(dh::DofHandler, i::Int) = dh.dof_nodes[:, i]
+
+
+function dofs_element(dh::DofHandler, i::Int)
+    @dbg_assert isclosed(dh)
+    return dh.dofs_elements[:, i]
+end
+
+
+
+function add_field!(dh::DofHandler, names::Vector{Symbol}, dims)
+    @assert length(names) == length(dims)
+    for i in 1:length(names)
+        add_field!(dh, names[i], dims[i])
+    end
+end
+
+function add_field!(dh::DofHandler, name::Symbol, dim::Int)
+    @dbg_assert !isclosed(dh)
+    if name in dh.field_names
+        error("duplicate field name")
     end
 
-    boundary_nodes = unique(reinterpret(Int, boundary_elements, (dim*length(boundary_elements),)))
-    print(typeof(coordinates))
-    coords_mat = reinterpret(Float64, coordinates, (dim, length(coordinates)))
+    push!(dh.field_names, name)
+    push!(dh.dof_dims, dim)
+    append!(dh.dofs_vec, length(dh.dofs_vec)+1:length(dh.dofs_vec) +  dim * nnodes(dh.mesh))
 
-    mesh = GeometryMesh(coords_mat, topology, boundary_nodes)
-
-   return mesh
+    return dh
 end
 
-immutable Dofs{N}
-    dof_ids::Matrix{Int}
-    dof_types::Vector{Symbol}
-    dof_dims::NTuple{N, Int}
-end
-
-
-function dofs_node(dofs::Dofs, i::Int)
-    return dofs.dof_ids[:, i]
-end
-
-function dofs_element(gm::GeometryMesh, dofs::Dofs, i::Int)
-    element_dofs = Int[]
-    ndofs = size(dofs.dof_ids, 1)
+function dof_offset(dh::DofHandler, field_name::Symbol)
     offset = 0
-    for dim_doftype in dofs.dof_dims
-        for node in gm.topology[:, i]
-            for j in 1:dim_doftype
-                push!(element_dofs, dofs.dof_ids[j + offset, node])
+    i = 0
+    for name in dh.field_names
+        i += 1
+        if name == field_name
+            return offset
+        else
+            offset += dh.dof_dims[i]
+        end
+    end
+    error("unexisting field name $field_name among $(dh.field_names)")
+end
+
+function ndim(dh::DofHandler, field_name::Symbol)
+    i = 0
+    for name in dh.field_names
+        i += 1
+        if name == field_name
+            return dh.dof_dims[i]
+        end
+    end
+    error("unexisting field name $field_name among $(dh.field_names)")
+end
+
+function close!(dh::DofHandler)
+    @assert !isclosed(dh)
+    dh.closed = true
+    dh.dofs_nodes = reshape(dh.dofs_vec, (length(dh.dofs_vec) ÷ nnodes(dh.mesh), nnodes(dh.mesh)))
+
+    n_elements = size(dh.mesh.topology, 2)
+    n_vertices = size(dh.mesh.topology, 1)
+    element_dofs = Int[]
+    ndofs = size(dh.dofs_nodes, 1)
+    for element in 1:n_elements
+        offset = 0
+        for dim_doftype in dh.dof_dims
+            for node in view(dh.mesh.topology, :, element)
+                for j in 1:dim_doftype
+                    push!(element_dofs, dh.dofs_nodes[offset + j, node])
+                end
+            end
+            offset += dim_doftype
+        end
+    end
+    dh.dofs_elements = reshape(element_dofs, (ndofs * n_vertices, n_elements))
+
+    return dh
+end
+
+function vtk_point_data(vtkfile, dh, u)
+    offset = 0
+    for i in 1:length(dh.field_names)
+        ndim_field = dh.dof_dims[i]
+        data = zeros(ndim_field, nnodes(dh.mesh))
+        for j in 1:size(dh.dofs_nodes, 2)
+            for k in 1:ndim_field
+                data[k, j] = u[dh.dofs_nodes[k + offset, j]]
             end
         end
-        offset += dim_doftype
+        vtk_point_data(vtkfile, data, string(dh.field_names[i]))
+        offset += ndim_field
     end
-
-  #  for node in gm.topology[:, i]
-  #      append!(element_dofs, dofs_node(dofs, node))
-  #  end
-    return element_dofs
+    return vtkfile
 end
 
-function add_dofs{N}(mesh::GeometryMesh, fields::Vector{Symbol}, dof_dims::NTuple{N, Int})
-    dofs_per_node = length(fields)
-    n_nodes = size(mesh.coords,2)
-    dofs = reshape(collect(1:dofs_per_node*n_nodes), (dofs_per_node, n_nodes))
-    @assert length(fields) == sum(dof_dims)
-    return Dofs(dofs, fields, dof_dims)
-end
-
-function node_neighboring_elements(mesh)
-    neighboring_elements = [Set{Int}() for i in 1:size(mesh.coords, 2)]
-
-    for e in 1:size(mesh.topology, 2)
-        for node in mesh.topology[:, e]
-            push!(neighboring_elements[node], e)
+function print_residuals(dh, f)
+    nfields = length(dh.field_names)
+    residuals = zeros(nfields)
+    offset = 0
+    for i in 1:nfields
+        ndim_field = dh.dof_dims[i]
+        for j in 1:size(dh.dofs_nodes, 2)
+            for k in 1:ndim_field
+                residuals[i] += f[dh.dofs_nodes[k + offset, j]]^2
+            end
         end
+        offset += ndim_field
+        residuals[i] = sqrt(residuals[i])
     end
-    return neighboring_elements
+
+    print("|f|: ", norm(f), " ")
+    for i in 1:nfields
+        print(dh.field_names[i], @sprintf(": %6.5g ", residuals[i]))
+    end
+    print("\n")
 end
