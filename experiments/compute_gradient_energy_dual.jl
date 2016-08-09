@@ -8,7 +8,7 @@ using JLD
 
 import ViscoCrystalPlast: GeometryMesh, Dofs, DirichletBoundaryConditions, CrystPlastMP, QuadratureData
 import ViscoCrystalPlast: create_mesh, add_dofs, dofs_element, element_coordinates, move_quadrature_data_to_nodes, interpolate_to
-
+import ViscoCrystalPlast: element_set, node_set
 
 function boundary_f_dual(field::Symbol, x, t::Float64)
     if field == :u
@@ -51,13 +51,13 @@ function startit{dim}(::Dim{dim}, nslips)
         # Solve fine scale problem #
         ############################
         if dim == 2
-            mesh_fine = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/mesh_overkill.mphtxt")
+            mesh_fine = ViscoCrystalPlast.GeometryMesh(ViscoCrystalPlast.read_mphtxt("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/mesh_overkill.mphtxt"))
             dofs_fine = ViscoCrystalPlast.add_dofs(mesh_fine, [:u, :v, :ξ⟂1, :ξ⟂2], (2,1,1))
-            bcs_fine = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_fine, mesh_fine.boundary_nodes, [:u, :v])
+            bcs_fine = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_fine, element_set(mesh_fine, "boundary_nodes"), [:u, :v])
         else
             mesh_fine = ViscoCrystalPlast.create_mesh("/home/kristoffer/Dropbox/PhD/Research/CrystPlast/meshes/3d_cube.mphtxt")
             dofs_fine = ViscoCrystalPlast.add_dofs(mesh_fine, [:u, :v, :w, :ξ⟂1, :ξ⟂2, :ξo1, :ξo2], (3,1,1,1,1))
-            bcs_fine = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_fine, mesh_fine.boundary_nodes, [:u, :v, :w])
+            bcs_fine = ViscoCrystalPlast.DirichletBoundaryConditions(dofs_fine, element_set(mesh_fine, "boundary_nodes"), [:u, :v, :w])
         end
 
 
