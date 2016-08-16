@@ -31,14 +31,22 @@ function GeometryMesh(mesh::AbaqusMesh, element_type::String)
     nnodes = size(c, 2)
     coords = reinterpret(Vec{dim, Float64}, c[1:dim, :], (nnodes,) )
 
+    offset = mesh.elements[element_type].numbers[1] - 1
+
+    for (element_set_name, element_set) in mesh.element_sets
+        for i in 1:length(element_set)
+            element_set[i] -= offset
+        end
+    end
+
     GeometryMesh(copy(coords), copy(mesh.elements[element_type].topology),
                  mesh.element_sets, mesh.node_sets)
 end
 
 
-function vtk_grid{dim}(mesh::GeometryMesh{dim}, filename)
+function vtk_grid{dim}(mesh::GeometryMesh{dim}, filename; compress = true, append = true)
     c_mat = reinterpret(Float64, mesh.coords, (dim, length(mesh.coords)))
-    JuAFEM.vtk_grid(mesh.topology, c_mat, filename)
+    JuAFEM.vtk_grid(mesh.topology, c_mat, filename, compress = compress, append = append)
 end
 
 function element_coordinates{dim}(gm::GeometryMesh{dim}, ele::Int)
@@ -149,9 +157,13 @@ end
 
 function close!(dh::DofHandler)
     @assert !isclosed(dh)
-    dh.closed = true
     dh.dofs_nodes = reshape(dh.dofs_vec, (length(dh.dofs_vec) ÷ nnodes(dh.mesh), nnodes(dh.mesh)))
+    add_element_dofs!(dh)
+    dh.closed = true
+    return dh
+end
 
+function add_element_dofs!(dh::DofHandler)
     n_elements = size(dh.mesh.topology, 2)
     n_vertices = size(dh.mesh.topology, 1)
     element_dofs = Int[]
@@ -168,15 +180,14 @@ function close!(dh::DofHandler)
         end
     end
     dh.dofs_elements = reshape(element_dofs, (ndofs * n_vertices, n_elements))
-
-    return dh
 end
 
 function vtk_point_data(vtkfile, dh, u)
     offset = 0
     for i in 1:length(dh.field_names)
         ndim_field = dh.dof_dims[i]
-        data = zeros(ndim_field, nnodes(dh.mesh))
+        space_dim = ndim_field == 2 ? 3 : ndim_field
+        data = zeros(space_dim, nnodes(dh.mesh))
         for j in 1:size(dh.dofs_nodes, 2)
             for k in 1:ndim_field
                 data[k, j] = u[dh.dofs_nodes[k + offset, j]]
@@ -203,7 +214,7 @@ function print_residuals(dh, f)
         residuals[i] = sqrt(residuals[i])
     end
 
-    print("|f|: ", norm(f), " ")
+    print("|f|: ", @sprintf(": %6.5g ", norm(f)))
     for i in 1:nfields
         print(dh.field_names[i], @sprintf(": %6.5g ", residuals[i]))
     end

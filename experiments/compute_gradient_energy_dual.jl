@@ -303,4 +303,3 @@ function total_slip{T, dim}(mesh, dofs, u::Vector{T}, mss, fev::FEValues{dim}, n
 
     return sqrt(tot_slip), tot_grad_en, tot_elastic_en
 end
-

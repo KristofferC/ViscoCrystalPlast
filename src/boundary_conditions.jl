@@ -40,6 +40,10 @@ function add_dirichletbc!(dbcs::DirichletBoundaryConditions, field::Symbol,
         @dbg_assert 0 < component <= ndim(dbcs.dh, field)
     end
 
+    if length(nodes) == 0
+        warn("Added Dirichlet BC to 0 node set")
+    end
+
     dofs_bc = Int[]
     offset = dof_offset(dbcs.dh, field)
     for node in nodes

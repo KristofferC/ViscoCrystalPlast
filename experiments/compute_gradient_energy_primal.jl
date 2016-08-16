@@ -8,6 +8,7 @@ using JLD
 using FileIO
 
 
+
 import ViscoCrystalPlast: GeometryMesh, Dofs, DirichletBoundaryConditions, CrystPlastMP, QuadratureData, DofHandler
 import ViscoCrystalPlast: add_dofs, dofs_element, element_coordinates, move_quadrature_data_to_nodes, interpolate_to
 import ViscoCrystalPlast: element_set, node_set, element_vertices
@@ -16,73 +17,12 @@ import ViscoCrystalPlast: add_field!, close!, element_set, element_coordinates,
                             add_dirichletbc!, ndim, ndofs, nelements, nnodes, free_dofs, update_dirichletbcs!, apply!,
                                 create_lookup, add_element_set!, add_node_set!
 
-const VP = ViscoCrystalPlast
-function get_RVE_boundary_nodes(mesh::GeometryMesh)
-    nodes_on_RVE_edge = Int[]
 
-    for (name, nodes) in mesh.node_sets
-        if contains(name, "body")
-            continue
-        end
-        append!(nodes_on_RVE_edge, nodes)
-    end
 
-    return unique(nodes_on_RVE_edge)
-end
 
-function make_slip_boundary_nodeset!(mesh::GeometryMesh)
-    nodes_grain = [Int[] for i in 1:length(mesh.element_sets)]
-    curr_set = 0
-    for (name, elements) in mesh.element_sets
-        curr_set += 1
-        for element in elements
-            for v in element_vertices(mesh, element)
-                push!(nodes_grain[curr_set], v)
-            end
-        end
-    end
-    nodes_grain = [unique(x) for x in nodes_grain]
 
-    n_grains = zeros(Int, nnodes(mesh))
-    for (i, nodes_in_grain) in enumerate(nodes_grain)
-        for node in nodes_in_grain
-            n_grains[node] += 1
-        end
-    end
 
-    nodes_in_boundary = find(x -> x > 1, n_grains)
-
-    # RVE boundary also need bcs
-    append!(nodes_in_boundary, get_RVE_boundary_nodes(mesh))
-
-    add_node_set!(mesh, "slip_boundary", unique(nodes_in_boundary))
-
-    return nodes_in_boundary
-end
-
-function create_element_to_grain_map{dim}(mesh::GeometryMesh{dim})
-    if dim == 2
-        grain_name = "face"
-    else
-        grain_name = "poly"
-    end
-    poly = zeros(Int, nelements(mesh))
-    for (name, elements) in mesh.element_sets
-        if !startswith(name, grain_name)
-            continue
-        else
-            p = parse(Int, name[5:end])
-            for element in elements
-                poly[element] = p
-            end
-        end
-    end
-    return poly
-end
-
-const dim = 3
-
-function startit{dim}(::Type{Dim{dim}})
+function startit{dim}(::Type{Dim{dim}}, nslips = 2)
 
 
     df = DataFrame(n_elements = Int[], l = Float64[], tot_slip = Float64[], tot_grad_energy = Float64[], tot_elastic_energy = Float64[],
@@ -94,49 +34,59 @@ function startit{dim}(::Type{Dim{dim}})
     quad_rule = QuadratureRule(Dim{dim}, RefTetrahedron(), 1)
     fe_values = FEValues(Float64, quad_rule, function_space)
 
-    primal_problem = ViscoCrystalPlast.PrimalProblem(dim, function_space)
+    primal_problem = ViscoCrystalPlast.PrimalProblem(nslips, function_space)
 
     write_dataframe = true
 
-    for l in 0.1:0.1
-        #if dim == 2
-        #    mp = setup_material(Dim{dim}, l)
-        #else
-        #    mp = setup_material_3d(Dim{dim}, l)
-        #end
-        times = linspace(0.0, 10.0, 2)
+    for l in 0.3
+
+        times = linspace(0.0, 10.0, 10)
 
         ############################
         # Solve fine scale problem #
-
         ############################
-        m = load("/home/kristoffer/neper-neutral/build/n10-id1.inp")
-        mesh_fine = VP.GeometryMesh(m, "C3D4")
-        add_node_set!(mesh_fine, "RVE_boundary", get_RVE_boundary_nodes(mesh_fine))
-        make_slip_boundary_nodeset!(mesh_fine)
-        polys = create_element_to_grain_map(mesh_fine)
+        if dim == 2
+            m = load("/home/kristoffer/neper-neutral/build/n10-id1_2D.inp")
+            mesh_fine = ViscoCrystalPlast.GeometryMesh(m, "CPE3")
+        else
+            m = load("/home/kristoffer/neper-neutral/build/n10-id1.inp")
+            mesh_fine = ViscoCrystalPlast.GeometryMesh(m, "C3D4")
+        end
+        ViscoCrystalPlast.add_node_set!(mesh_fine, "RVE_boundary", ViscoCrystalPlast.get_RVE_boundary_nodes(mesh_fine))
+        ViscoCrystalPlast.add_node_set!(mesh_fine, "slip_boundary", ViscoCrystalPlast.get_grain_boundary_nodes(mesh_fine))
 
-        mps = [setup_material_3d(Dim{3}, 0.2) for i in 1:length(unique(polys))]
 
-        dh = DofHandler(mesh_fine)
-        VP.add_field!(dh, [:u, :γ1, :γ2], (dim, 1, 1))
-        close!(dh)
-        dbcs = DirichletBoundaryConditions(dh)
+        polys = ViscoCrystalPlast.create_element_to_grain_map(mesh_fine)
+        if dim == 2
+            mps = [setup_material(Dim{2}, l, nslips) for i in 1:length(unique(polys))]
+        else
+            mps = [setup_material_3d(Dim{3}, l, nslips) for i in 1:length(unique(polys))]
+        end
+
+        dh = ViscoCrystalPlast.DofHandler(mesh_fine)
+        ViscoCrystalPlast.add_field!(dh, [:u, [Symbol("γ", i) for i in 1:nslips]...], (dim, ones(Int, nslips)...))
+        ViscoCrystalPlast.close!(dh)
+        dbcs = ViscoCrystalPlast.DirichletBoundaryConditions(dh)
 
         # Microhard
-        ViscoCrystalPlast.add_dirichletbc!(dbcs, :γ1, VP.node_set(mesh_fine, "slip_boundary"), (x,t) -> 0.0)
-        ViscoCrystalPlast.add_dirichletbc!(dbcs, :γ2, VP.node_set(mesh_fine, "slip_boundary"), (x,t) -> 0.0)
-        ViscoCrystalPlast.add_dirichletbc!(dbcs, :u, VP.node_set(mesh_fine, "RVE_boundary"), (x,t) -> 0.01 * x, collect(1:dim))
+        for i in 1:nslips
+            ViscoCrystalPlast.add_dirichletbc!(dbcs, Symbol("γ", i), ViscoCrystalPlast.node_set(mesh_fine, "slip_boundary"), (x,t) -> 0.0)
+        end
+        if dim == 2
+            ViscoCrystalPlast.add_dirichletbc!(dbcs, :u, ViscoCrystalPlast.node_set(mesh_fine, "RVE_boundary"), (x,t) -> t * 0.01 * [x[1], 0.0], collect(1:dim))
+        else
+            ViscoCrystalPlast.add_dirichletbc!(dbcs, :u, ViscoCrystalPlast.node_set(mesh_fine, "RVE_boundary"), (x,t) -> t * 0.01 * [x[1], x[2], 2*x[3]], collect(1:dim))
+        end
 
-        close!(dbcs)
+        ViscoCrystalPlast.close!(dbcs)
 
         pvd_fine = paraview_collection(joinpath(dirname(@__FILE__), "vtks", "shear_primal_fine_$(dim)d_$l"))
         timestep_fine = 0
-        exporter_fine = (time, u, f, mss) ->
+        exporter_fine = (time, u, mss) ->
         begin
             timestep_fine += 1
-            mss_nodes = move_quadrature_data_to_nodes(mss, mesh_fine, quad_rule)
-            output(pvd_fine, time, timestep_fine, "3d_zerk_$l", mesh_fine, dh, u, f, mss_nodes, quad_rule, mps, polys)
+            mss_nodes = ViscoCrystalPlast.move_quadrature_data_to_nodes(mss, mesh_fine, quad_rule)
+            output(pvd_fine, time, timestep_fine, "$(dim)d_test_3", mesh_fine, dh, u, dbcs, mss_nodes, quad_rule, mps, polys)
         end
 
         sol_fine, mss_fine = ViscoCrystalPlast.solve_problem(primal_problem, mesh_fine, dh, dbcs, fe_values, mps, times,
@@ -205,7 +155,7 @@ function startit{dim}(::Type{Dim{dim}})
     return df
 end
 
-function setup_material{dim}(::Type{Dim{dim}}, lα)
+function setup_material{dim}(::Type{Dim{dim}}, lα::Float64, nslips::Int)
     E = 200000.0
     ν = 0.3
     n = 2.0
@@ -215,9 +165,10 @@ function setup_material{dim}(::Type{Dim{dim}}, lα)
     C = 1.0e3
     tstar = 1000.0
     #angles = [20.0, 40.0]
-    srand(1234)
-    angles = [90 * rand(), 90 * rand()]
-
+    angles = [80.0, 60.0, 40.0, 20.0]
+    srand(12345)
+    #angles = [90 * rand(), 90 * rand()]
+    @assert length(angles) == nslips
     mp = ViscoCrystalPlast.CrystPlastMP(Dim{dim}, E, ν, n, H⟂, Ho, lα, tstar, C, angles)
     return mp
 end
@@ -230,7 +181,8 @@ function rand_eul()
     return (α, γ, β)
 end
 
-function setup_material_3d{dim}(::Type{Dim{dim}}, lα)
+function setup_material_3d{dim}(::Type{Dim{dim}}, lα, nslips::Int)
+    srand(1234)
     E = 200000.0
     ν = 0.3
     n = 2.0
@@ -239,24 +191,26 @@ function setup_material_3d{dim}(::Type{Dim{dim}}, lα)
     Ho = 0.1E
     C = 1.0e3
     tstar = 1000.0
-    ϕs = [rand_eul() for i in 1:2]
+    ϕs = [rand_eul() for i in 1:nslips]
+     @assert length(ϕs) == nslips
     mp = ViscoCrystalPlast.CrystPlastMP(Dim{dim}, E, ν, n, H⟂, Ho, lα, tstar, C, ϕs)
     return mp
 end
 
 
 
-function output{QD <: QuadratureData, dim}(pvd, time, timestep, filename, mesh, dh, u, f,
+function output{QD <: ViscoCrystalPlast.QuadratureData, dim}(pvd, time, timestep, filename, mesh, dh, u, dbcs,
                                            mss_nodes::AbstractVector{QD}, quad_rule::QuadratureRule{dim}, mps, polys)
     mp = mps[1]
     nodes_per_ele = dim == 2 ? 3 : 4
     n_sym_components = dim == 2 ? 3 : 6
     tot_nodes = nnodes(mesh)
 
-    vtkfile = vtk_grid(mesh, joinpath(dirname(@__FILE__), "vtks", "$filename" * "_$timestep"))
+    vtkfile = vtk_grid(mesh, joinpath(dirname(@__FILE__), "vtks", "$filename" * "_$timestep"), compress=true, append=true)
+
 
     vtk_point_data(vtkfile, dh, u)
-    #vtk_point_data(vtkfile, dh, f)
+    vtk_point_data(vtkfile, dbcs)
 
     vtk_point_data(vtkfile, reinterpret(Float64, [mss_nodes[i].σ for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Stress")
     vtk_point_data(vtkfile, reinterpret(Float64, [mss_nodes[i].ε  for i in 1:tot_nodes], (n_sym_components, tot_nodes)), "Strain")

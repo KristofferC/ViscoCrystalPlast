@@ -1,8 +1,6 @@
-
-
-function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(primal_prob::PrimalProblem,
-                           a::Vector{T}, a_prev, x::Vector, fev::FEValues{dim, Q, func_space},
-                            dt, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP)
+function intf{dim, T, QD <: CrystPlastPrimalQD}(primal_prob::PrimalProblem,
+                           a::Vector{T}, a_prev::Vector{T}, x::Vector, fev::FEValues{dim},
+                            dt, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP, compute_derivative::Bool)
 
 
     @unpack mp: s, m, l, H⟂, Ho, Ee, sxm_sym
@@ -54,15 +52,17 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(primal_prob::Prim
         σ = Ee ⊡ ε_e
         for i in 1:nnodes
             updateblock!(f_u, ∇ϕ(i) ⋅ σ * detJdV(fev, q_point), +, i)
-            for j in 1:nnodes
-                K_uu_gp = dotdot(∇ϕ(i), Ee, ∇ϕ(j)) * detJdV(fev, q_point)
-                updateblock!(K_uu, K_uu_gp, +, i, j)
-                for β in 1:nslip
-                    K_uγ_qp = - ∇ϕ(i) ⋅ mp.Esm[β] * ϕ(j) * detJdV(fev, q_point)
-                    #K_γu_qp = - ϕ(j) * mp.Esm[β] ⋅ ∇ϕ(i) * detJdV(fev, q_point)
-                    updateblock!(K_uγs[β], K_uγ_qp, +, i, j)
-                    updateblock!(K_γsu[β], K_uγ_qp, +, i, j) # sym
-                    #updateblock!(K_γsu[β], K_γu_qp, +, i, j)
+            if compute_derivative
+                for j in 1:nnodes
+                    K_uu_gp = dotdot(∇ϕ(i), Ee, ∇ϕ(j)) * detJdV(fev, q_point)
+                    updateblock!(K_uu, K_uu_gp, +, i, j)
+                    for β in 1:nslip
+                        K_uγ_qp = - ∇ϕ(i) ⋅ mp.Esm[β] * ϕ(j) * detJdV(fev, q_point)
+                        #K_γu_qp = - ϕ(j) * mp.Esm[β] ⋅ ∇ϕ(i) * detJdV(fev, q_point)
+                        updateblock!(K_uγs[β], K_uγ_qp, +, i, j)
+                        updateblock!(K_γsu[β], K_uγ_qp, +, i, j) # sym
+                        #updateblock!(K_γsu[β], K_γu_qp, +, i, j)
+                    end
                 end
             end
         end
@@ -94,25 +94,31 @@ function intf{dim, func_space, T, Q, QD <: CrystPlastPrimalQD}(primal_prob::Prim
             end
         end
 
-        for α in 1:nslip, β in 1:nslip
-            K_γsγsαβ = K_γsγs[α, β]
-            for i in 1:nnodes, j in 1:nnodes
-                K_γsγsαβ[i,j] += ϕ(i) * mp.Dαβ[α, β] * ϕ(j) * detJdV(fev, q_point)
-                if α == β
-                    K_γsγsαβ[i,j] += (mp.lα^2 * ∇ϕ(i) ⋅ mp.Hgrad[β] ⋅ ∇ϕ(j) + ϕ(i) * Aτγ[β] * ϕ(j)) * detJdV(fev, q_point)
+        if compute_derivative
+            for α in 1:nslip, β in 1:nslip
+                K_γsγsαβ = K_γsγs[α, β]
+                for i in 1:nnodes, j in 1:nnodes
+                    K_γsγsαβ[i,j] += ϕ(i) * mp.Dαβ[α, β] * ϕ(j) * detJdV(fev, q_point)
+                    if α == β
+                        K_γsγsαβ[i,j] += (mp.lα^2 * ∇ϕ(i) ⋅ mp.Hgrad[β] ⋅ ∇ϕ(j) + ϕ(i) * Aτγ[β] * ϕ(j)) * detJdV(fev, q_point)
+                    end
                 end
             end
         end
     end
 
     f[u_dofs] = full(f_u)
-    K[up◫, up◫] = K_uu
+    if compute_derivative
+        K[up◫, up◫] = K_uu
+    end
     for α in 1:nslip
         f[γ_dofs[α]] = f_γs[α]
-        K[Block(Int(u◫) + α, 1)] = K_uγs[α]'
-        K[Block(1, Int(u◫) + α)] = K_γsu[α]
-        for β in 1:nslip
-             K[Block(Int(u◫) + β, Int(u◫) + α)] = K_γsγs[α, β]
+        if compute_derivative
+            K[Block(Int(u◫) + α, 1)] = K_uγs[α]'
+            K[Block(1, Int(u◫) + α)] = K_γsu[α]
+            for β in 1:nslip
+                 K[Block(Int(u◫) + β, Int(u◫) + α)] = K_γsγs[α, β]
+            end
         end
     end
 
@@ -128,10 +134,25 @@ function compute_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
     return sign(Δγ) * τ
 end
 
+#function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
+#    @unpack mp: C, tstar, n
+#    Δγ = γ_gp - γ_gp_prev
+#    C * (tstar / ∆t)^(1/n) * 1/n * abs(Δγ)^(1/n - 1)
+#end
+
+
+using Calculus
+
+function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
+    f(γ) = compute_tau(γ, γ_gp_prev, ∆t, mp)
+    return Calculus.derivative(f, γ_gp)
+end
+
+#=
 function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
     @unpack mp: C, tstar, n
     Δγ = γ_gp - γ_gp_prev
-    C * (tstar / ∆t)^(1/n) * 1/n * abs(Δγ)^(1/n - 1)
+    C * (tstar / ∆t)^(1/n) * 1/n * abs(Δγ)^(1/n - 1) * sign(Δγ)
+    # C * (tstar / ∆t)^(1/n) * 1/n * Δγ^(1/n - 1) * Δγ / abs(Δγ)
 end
-
-
+=#

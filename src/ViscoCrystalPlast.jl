@@ -12,6 +12,7 @@ using BlockArrays
 using AffineTransforms
 using FileIO
 using MeshIO
+using NLsolve
 
 import JuAFEM.vtk_point_data
 
@@ -47,6 +48,7 @@ include("ComsolMeshReader.jl")
 include("boundary_conditions.jl")
 include("sparse_tools.jl")
 include("mesh_transfer.jl")
+include("mesh_utils.jl")
 
 #include("mesh_readers/mesh_reader.jl")
 

@@ -1,8 +1,6 @@
-
-function intf{dim, T, Q, MS <: CrystPlastDualQD}(
-                        dual_prob::DualProblem{dim, T}, a::Vector{T}, prev_a::AbstractArray{Q},
-                        x::AbstractArray{Q}, fev::FEValues{dim}, dt,
-                        mss::AbstractVector{MS}, temp_mss::AbstractVector{MS}, mp::CrystPlastMP)
+function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
+                        a::Vector{T}, prev_a::Vector{T}, x::Vector, fev::FEValues{dim}, dt,
+                        mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP, compute_derivative::Bool)
     @unpack mp: s, m, H⟂, Ee, sxm_sym, l
     nslip = length(sxm_sym)
 
@@ -19,8 +17,8 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
 
     @assert length(a) == nnodes * (dim + ngradvars * nslip)
 
-    x_vec = reinterpret(Vec{dim, Q}, x, (nnodes,))
-    reinit!(fev, x_vec)
+    #x_vec = reinterpret(Vec{dim, Q}, x, (nnodes,))
+    reinit!(fev, x)
     reset!(glob_prob)
 
     extract!(u_nodes, a, u_dofs)
@@ -35,6 +33,7 @@ function intf{dim, T, Q, MS <: CrystPlastDualQD}(
             extract!(ξo_nodes[α], a, ξos_dofs[α])
         end
     end
+
 
     for q_point in 1:length(JuAFEM.points(get_quadrule(fev)))
         ϕ = i -> shape_value(fev, q_point, i)

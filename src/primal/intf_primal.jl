@@ -1,4 +1,4 @@
-function intf{dim, T, Q}(a::Vector{T}, a_prev, x::AbstractArray{Q}, fev::FEValues{dim}, fe_u, fe_g, _,
+function intfff{dim, T, Q}(a::Vector{T}, a_prev::Vector{T}, x::AbstractArray{Q}, fev::FEValues{dim}, fe_u, fe_g, _,
                             dt, mss, temp_mss, mp::CrystPlastMP)
 
 
@@ -96,4 +96,3 @@ function compute_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
     τ = C * (tstar / ∆t * abs(Δγ))^(1/n)
     return sign(Δγ) * τ
 end
-
