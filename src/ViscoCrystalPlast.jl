@@ -13,7 +13,7 @@ using AffineTransforms
 using FileIO
 using MeshIO
 using NLsolve
-
+using JLD
 import JuAFEM.vtk_point_data
 
 abstract AbstractProblem
@@ -49,6 +49,7 @@ include("boundary_conditions.jl")
 include("sparse_tools.jl")
 include("mesh_transfer.jl")
 include("mesh_utils.jl")
+include("serialization.jl")
 
 #include("mesh_readers/mesh_reader.jl")
 

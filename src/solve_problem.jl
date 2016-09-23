@@ -16,6 +16,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::GeometryMesh, dofhan
 
 
     nslip = length(mps[1].angles)
+
     if isa(problem, PrimalProblem)
         mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:nelements(mesh)]
         temp_mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:nelements(mesh)]

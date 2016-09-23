@@ -35,6 +35,7 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
     end
 
 
+
     for q_point in 1:length(JuAFEM.points(get_quadrule(fev)))
         ϕ = i -> shape_value(fev, q_point, i)
         ∇ϕ = i -> shape_gradient(fev, q_point, i)
@@ -47,11 +48,13 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
             end
         end
 
-        @assert nslip == 2
+
         if dim == 2
-            Y = [ε[1,1], ε[2,1], ε[1,2], ε[2,2], χ⟂[1], χ⟂[2]]
+            Y = vcat(vec(ε), χ⟂)
+            #Y = T[ε[1,1], ε[2,1], ε[1,2], ε[2,2], χ⟂;]
         else
-            Y = [ε[1,1], ε[2,1], ε[3,1], ε[1,2], ε[2,2], ε[3,2], ε[1,3], ε[2,3], ε[3,3],  χ⟂[1], χ⟂[2], χo[1], χo[2]]
+            Y = vcat(vec(ε), χ⟂, χo)
+            #Y = T[ε[1,1], ε[2,1], ε[3,1], ε[1,2], ε[2,2], ε[3,2], ε[1,3], ε[2,3], ε[3,3], χ⟂; χo;]
         end
         ms = mss[q_point]
         temp_ms = temp_mss[q_point]
