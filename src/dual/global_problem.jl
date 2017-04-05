@@ -59,15 +59,9 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
 
     for q_point in 1:getnquadpoints(fev_u)
         dΩ = getdetJdV(fev_u, q_point)
-        δu = (i) -> shape_value(fev_u, q_point, i)
-        ∇δu = (i) -> shape_gradient(fev_u, q_point, i)
-
-        δξ = (i) -> shape_value(fev_ξ, q_point, i)
-        ∇δξ = (i) -> shape_gradient(fev_ξ, q_point, i)
-
         ε = function_symmetric_gradient(fev_u, q_point, u_vec)
         for i in 1:nbasefuncs_u
-            δε[i] = symmetric(∇δu(i))
+            δε[i] = symmetric(shape_gradient(fev_u, q_point, i))
         end
 
         for α in 1:nslip
@@ -86,7 +80,7 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
         temp_ms = temp_mss[q_point]
         ms = mss[q_point]
         @timeit "local problem" begin
-            X = solve_local_problem(Y, dual_prob.local_problem, dt, mp, ms, temp_ms )
+            X = solve_local_problem(Y, dual_prob.local_problem, dt, mp, ms, temp_ms)
         end
 
         γ = X[γ◫]
@@ -161,9 +155,10 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
                     β_offset = nbasefuncs_ξ * (β - 1)
                     δεDAγξ⟂sΒ = δε[i] ⊡ DAγξ⟂s[β]
                     for j in 1:nbasefuncs_ξ
-                            K_uξ⟂s[i, β_offset + j] += -(δεDAγξ⟂sΒ) * (∇δξ(j) ⋅ mp.s[β]) * dΩ
+                        ∇δξj = shape_gradient(fev_ξ, q_point, j)
+                            K_uξ⟂s[i, β_offset + j] += -(δεDAγξ⟂sΒ) * (∇δξj ⋅ mp.s[β]) * dΩ
                         if dim == 3
-                            K_uξos[i, β_offset + j] += -(δεDAγξ⟂sΒ) * (∇δξ(j) ⋅ mp.l[β]) * dΩ
+                            K_uξos[i, β_offset + j] += -(δεDAγξ⟂sΒ) * (∇δξj ⋅ mp.l[β]) * dΩ
                         end
                     end
                 end
@@ -181,13 +176,15 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
 
             α_offset = nbasefuncs_ξ * (α - 1)
             for i in 1:nbasefuncs_ξ
-                ∇δξ_i_s_α = ∇δξ(i) ⋅ mp.s[α]
-                ∇δξ_i_l_α = ∇δξ(i) ⋅ mp.l[α]
+                δξi = shape_value(fev_ξ, q_point, i)
+                ∇δξi = shape_gradient(fev_ξ, q_point, i)
+                ∇δξ_i_s_α = ∇δξi ⋅ mp.s[α]
+                ∇δξ_i_l_α = ∇δξi ⋅ mp.l[α]
 
                 # f_ξ
-                    f_ξ⟂s[α_offset + i] += -(g⟂_gp * δξ(i) + ∇δξ_i_s_α  * γ[α]) * dΩ
+                    f_ξ⟂s[α_offset + i] += -(g⟂_gp * δξi + ∇δξ_i_s_α * γ[α]) * dΩ
                 if dim == 3
-                    f_ξos[α_offset + i] += -(go_gp * δξ(i) + ∇δξ_i_l_α * γ[α]) * dΩ
+                    f_ξos[α_offset + i] += -(go_gp * δξi + ∇δξ_i_l_α * γ[α]) * dΩ
                 end
 
                 # K_ξu
@@ -206,18 +203,20 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
                         # K_ξξ diag
                         β_offset = nbasefuncs_ξ * (β - 1)
                         for j in 1:nbasefuncs_ξ
-                            ∇δξ_j_s_β = ∇δξ(j) ⋅ mp.s[β]
-                            ∇δξ_j_l_β = ∇δξ(j) ⋅ mp.l[β]
+                            δξj = shape_value(fev_ξ, q_point, j)
+                            ∇δξj = shape_gradient(fev_ξ, q_point, j)
+                            ∇δξ_j_s_β = ∇δξj ⋅ mp.s[β]
+                            ∇δξ_j_l_β = ∇δξj ⋅ mp.l[β]
                             if α == β
-                                c = -δξ(i) / (mp.H⟂ * mp.lα^2) * δξ(j) * dΩ
+                                c = -δξi / (mp.H⟂ * mp.lα^2) * δξj * dΩ
 
-                                K_ξ⟂sξ⟂s[α_offset + i, β_offset + j] += -δξ(i) / (mp.H⟂ * mp.lα^2) * δξ(j) * dΩ
+                                K_ξ⟂sξ⟂s[α_offset + i, β_offset + j] += -δξi / (mp.H⟂ * mp.lα^2) * δξj * dΩ
                             end
                             K_ξ⟂sξ⟂s[α_offset + i, β_offset + j] += - ∇δξ_i_s_α * Aγξ⟂[α, β] * ∇δξ_j_s_β * dΩ
 
                             if dim == 3
                                 if α == β
-                                    K_ξosξos[α_offset + i, β_offset + j] += -δξ(i) / (mp.Ho * mp.lα^2) * δξ(j) * dΩ
+                                    K_ξosξos[α_offset + i, β_offset + j] += -δξi / (mp.Ho * mp.lα^2) * δξj * dΩ
                                 end
                                 K_ξosξos[α_offset + i, β_offset + j] += -∇δξ_i_l_α * Aγξo[α, β] * ∇δξ_j_l_β * dΩ
                                 K_ξ⟂sξos[α_offset + i, β_offset + j] += -∇δξ_i_s_α * Aγξo[α, β] * ∇δξ_j_l_β * dΩ
