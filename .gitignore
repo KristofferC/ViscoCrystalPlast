@@ -1,0 +1,14 @@
+*.vtk
+*.vtu
+vtks/
+*.pvd
+*.ipynb
+*.tex
+*.png
+*.inp
+*.jld
+*.tess
+*.msh
+*.pdf
+*.geo
+*.ipynb_checkpoints
