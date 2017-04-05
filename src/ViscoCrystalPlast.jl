@@ -41,7 +41,6 @@ include("material_parameters.jl")
 
 include("mesh_reader.jl")
 include("mesh.jl")
-include("sparse_tools.jl")
 include("mesh_transfer.jl")
 include("mesh_utils.jl")
 include("utilities.jl")
@@ -65,7 +64,6 @@ immutable DualProblem{dim, T, N} <: AbstractProblem
     local_problem::DualLocalProblem{dim, T}
     global_problem::DualGlobalProblem{dim, T, N}
 end
-
 
 function DualProblem{dim}(nslips, fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim})
     DualProblem(DualLocalProblem(nslips, Dim{dim}), DualGlobalProblem(nslips, fev_u, fev_ξ))

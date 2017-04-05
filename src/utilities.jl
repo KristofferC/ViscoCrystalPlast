@@ -5,7 +5,6 @@ function compute_γdofs(dofs_u, nnodes, dofs_g, nslip, slip)
     return start : start + nnodes * dofs_g - 1
 end
 
-
 function compute_ξdofs(dofs_u, nnodes, dofs_g, nslip, slip, ξtype::Symbol)
     @assert slip <= nslip
     u_offset = nnodes * dofs_u

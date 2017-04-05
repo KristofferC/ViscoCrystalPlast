@@ -80,10 +80,12 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, primary_field::Vector, prev
                         bcs::DirichletBoundaryConditions, mps::Vector, mss, temp_mss, dt::Float64, polys::Vector{Int})
 
     #@assert length(primary_field) == length(dofs.dof_ids)
+
     fill!(K.nzval, 0.0)
     global_dofs = zeros(Int, ndofs_per_cell(dofhandler))
     f_int = zeros(ndofs(dofhandler))
     f_int_sq = zeros(ndofs(dofhandler))
+    assembler = start_assemble(K, f_int)
 
     @timeit "assemble loop" begin
         @showprogress 0.2 "Assembling..." for element_id in 1:getncells(mesh)
@@ -104,13 +106,18 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, primary_field::Vector, prev
             end
 
             @timeit "assemble to global" begin
-                assemble!(f_int, fe_int, global_dofs)
-                assemble!(f_int_sq, fe_int.^2, global_dofs)
-                assemble!(K, Ke, global_dofs)
+                JuAFEM.assemble!(assembler, fe_int, Ke, global_dofs)
+                JuAFEM.assemble!(f_int_sq, fe_int.^2, global_dofs)
             end
         end
     end
 
-    free = bcs.free_dofs
-    return K[free, free], f_int[free], sqrt.(f_int_sq[free])
+    @timeit "extract free" begin
+        free = bcs.free_dofs
+        Kfree = K[free, free]
+        f_int_free = f_int[free]
+        f_sq_free = sqrt.(f_int_sq[free])
+    end
+
+    return Kfree, f_int_free, f_sq_free
 end
