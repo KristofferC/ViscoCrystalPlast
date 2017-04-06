@@ -317,6 +317,7 @@ function add_grad_dofs!{dim}(mesh::Grid{dim}, duplicated_nodes::Vector{Vector{In
     @dbg_assert findfirst(dofs_nodes, -1) == 0
 
     JuAFEM.add_element_dofs!(dh)
+    dh.ndofs = length(unique(vec(dh.dofs_nodes)))
     dh.closed[] = true
     return dh
 end
