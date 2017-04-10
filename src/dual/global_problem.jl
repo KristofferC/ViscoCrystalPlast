@@ -141,7 +141,7 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
 
         for i in 1:nbasefuncs_u
             # f_u
-            f_u[i] = (δε[i] ⊡ σ) * dΩ
+            f_u[i] += (δε[i] ⊡ σ) * dΩ
 
             # K_uu
             if compute_stiffness
