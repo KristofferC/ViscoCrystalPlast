@@ -59,10 +59,6 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             print("Error: ")
             print_residuals(dofhandler, full_residuals)
 
-            #if iter != 1 && norm(f[free]./f_sq[free], Inf)  <= 1e-5 && norm(f[free], Inf) <= 1e-8
-            #    break
-            #end
-
             apply_zero!(K, f, dbcs)
 
             @timeit "factorization" begin
@@ -70,9 +66,6 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             end
             apply_zero!(ΔΔu, dbcs)
             ∆u .-= ΔΔu
-
-
-
             iter += 1
         end
 
@@ -94,6 +87,8 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector,
     global_dofs = zeros(Int, ndofs_per_cell(dofhandler))
     f_int = zeros(total_dofs)
     f_int_sq = zeros(total_dofs)
+    # Internal force vector 
+    C_int = zeros(dim*dim)
     assembler = start_assemble(K, f_int)
 
     @timeit "assemble loop" begin

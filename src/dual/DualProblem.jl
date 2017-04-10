@@ -8,7 +8,9 @@ immutable DualGlobalProblem{dim, T, N}
     ξo_nodes::Vector{Vector{T}}
 
     f::Vector{T}
+    C_f::Vector{T}
     K::Matrix{T}
+    C_K::Matrix{T}
 
     # Dofs
     u_dofs::UnitRange{Int}
@@ -44,7 +46,9 @@ function DualGlobalProblem{dim}(nslips::Int, fev_u::CellVectorValues{dim}, fev_�
     n_total_dofs = nbasefuncs_u + n_tot_ξ
 
     f = zeros(T, n_total_dofs)
+    C_f = zeros(T, dim * dim)
     K = zeros(T, n_total_dofs, n_total_dofs)
+    C_K = zeros(T, nbasefuncs_u, dim * dim)
 
     # Dofs
     ngradvars = dim - 1
@@ -70,8 +74,8 @@ function DualGlobalProblem{dim}(nslips::Int, fev_u::CellVectorValues{dim}, fev_�
     DAγξos = [zero(SymmetricTensor{2, dim, T}) for α in 1:nslips]
 
     return DualGlobalProblem(u, ξ⟂s, ξos, # Nodal unknowns
-                            f, # Forces
-                            K, # Tangents
+                            f, C_f # Forces
+                            K, C_K # Tangents
                             u_dofs, ξ⟂_dofs, ξo_dofs, # Dofs
                             χ⟂, χo, Aγεs, δε, DAγξ⟂s, DAγξos) # Misc
 

@@ -1,6 +1,6 @@
 function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
                         a::Vector{T}, prev_a::Vector{T}, x::Vector, fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, dt,
-                        mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP, compute_stiffness::Bool)
+                        ɛ_bar, σ_bar, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP, compute_stiffness::Bool)
     @unpack s, m, H⟂, Ee, sxm_sym, l = mp
     nslip = length(sxm_sym)
 
@@ -10,7 +10,7 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
     @unpack u_dofs, ξ⟂s_dofs, ξos_dofs = glob_prob
     @unpack χ⟂, χo, Aγεs, δε, DAγξ⟂s, DAγξos = glob_prob
 
-    @unpack f, K = glob_prob
+    @unpack f, C_f, K, C_K = glob_prob
 
     nbasefuncs_u = getnbasefunctions(fev_u)
     nbasefuncs_ξ = getnbasefunctions(fev_ξ)
@@ -42,7 +42,9 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
     reinit!(fev_u, x)
     reinit!(fev_ξ, x)
     fill!(K, 0.0)
+    fill!(C_K, 0.0)
     fill!(f, 0.0)
+    fill!(C_f, 0.0)
 
     extract!(u_nodes, a, u_dofs)
     u_vec = reinterpret(Vec{dim, T}, u_nodes, (nnodes,))
@@ -60,6 +62,7 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
     for q_point in 1:getnquadpoints(fev_u)
         dΩ = getdetJdV(fev_u, q_point)
         ε = function_symmetric_gradient(fev_u, q_point, u_vec)
+        ∇u_qp = function_gradient(fev_u, q_point, u_vec)
         for i in 1:nbasefuncs_u
             δε[i] = symmetric(shape_gradient(fev_u, q_point, i))
         end
@@ -139,9 +142,15 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
 
         Ee_DA = Ee - DA
 
+        # C_f
+        C_f += -1/Ω * (∇u_qp - ɛ_bar) * dΩ
+
         for i in 1:nbasefuncs_u
             # f_u
             f_u[i] += (δε[i] ⊡ σ) * dΩ
+
+            # C_K
+
 
             # K_uu
             if compute_stiffness
