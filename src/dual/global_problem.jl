@@ -1,6 +1,6 @@
 function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
-                        a::Vector{T}, prev_a::Vector{T}, x::Vector, fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, dt,
-                        ɛ_bar, σ_bar, mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp::CrystPlastMP, compute_stiffness::Bool)
+                        a::Vector{T}, prev_a::Vector{T}, ɛ_bar, σ_bar, x::Vector, fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, dt,
+                        mss::AbstractVector{QD}, temp_mss::AbstractVector{QD}, mp, compute_stiffness::Bool)
     @unpack s, m, H⟂, Ee, sxm_sym, l = mp
     nslip = length(sxm_sym)
 
@@ -9,6 +9,13 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
     @unpack u_nodes, ξo_nodes, ξ⟂_nodes = glob_prob
     @unpack u_dofs, ξ⟂s_dofs, ξos_dofs = glob_prob
     @unpack χ⟂, χo, Aγεs, δε, DAγξ⟂s, DAγξos = glob_prob
+    @unpack Ω, problem_type = glob_prob
+
+    if problem_type == Dirichlet
+        Ω = 1.0
+    end
+
+    σv = fromvoigt(Tensor{2, dim}, σ_bar)
 
     @unpack f, C_f, K, C_K = glob_prob
 
@@ -143,20 +150,26 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
         Ee_DA = Ee - DA
 
         # C_f
-        C_f += -1/Ω * (∇u_qp - ɛ_bar) * dΩ
+        C_f += tovoigt(-1/Ω * (∇u_qp - ɛ_bar) * dΩ)
 
         for i in 1:nbasefuncs_u
+            δ∇ui = shape_gradient(fev_u, q_point, i)
+
             # f_u
-            f_u[i] += (δε[i] ⊡ σ) * dΩ
+            if problem_type == Dirichlet
+                f_u[i] += (δε[i] ⊡ σ) * dΩ
+            else
+                f_u[i] += 1/Ω * (δε[i] ⊡ σ - σv ⊡ δ∇ui) * dΩ
+            end
 
             # C_K
-
+            C_K[i, :] .+= tovoigt(-1/Ω * δ∇ui * dΩ)
 
             # K_uu
             if compute_stiffness
                 δεEe_DA = δε[i] ⊡ Ee_DA
                 for j in 1:nbasefuncs_u
-                    K_uu[i, j] += δεEe_DA ⊡ δε[j] * dΩ
+                    K_uu[i, j] += 1/Ω * δεEe_DA ⊡ δε[j] * dΩ
                 end
 
                 # K_uξ
@@ -165,9 +178,9 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
                     δεDAγξ⟂sΒ = δε[i] ⊡ DAγξ⟂s[β]
                     for j in 1:nbasefuncs_ξ
                         ∇δξj = shape_gradient(fev_ξ, q_point, j)
-                            K_uξ⟂s[i, β_offset + j] += -(δεDAγξ⟂sΒ) * (∇δξj ⋅ mp.s[β]) * dΩ
+                            K_uξ⟂s[i, β_offset + j] += - 1/Ω * (δεDAγξ⟂sΒ) * (∇δξj ⋅ mp.s[β]) * dΩ
                         if dim == 3
-                            K_uξos[i, β_offset + j] += -(δεDAγξ⟂sΒ) * (∇δξj ⋅ mp.l[β]) * dΩ
+                            K_uξos[i, β_offset + j] += - 1/Ω * (δεDAγξ⟂sΒ) * (∇δξj ⋅ mp.l[β]) * dΩ
                         end
                     end
                 end
@@ -189,11 +202,10 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
                 ∇δξi = shape_gradient(fev_ξ, q_point, i)
                 ∇δξ_i_s_α = ∇δξi ⋅ mp.s[α]
                 ∇δξ_i_l_α = ∇δξi ⋅ mp.l[α]
-
                 # f_ξ
-                    f_ξ⟂s[α_offset + i] += -(g⟂_gp * δξi + ∇δξ_i_s_α * γ[α]) * dΩ
+                    f_ξ⟂s[α_offset + i] += - 1/Ω * (g⟂_gp * δξi + ∇δξ_i_s_α * γ[α]) * dΩ
                 if dim == 3
-                    f_ξos[α_offset + i] += -(go_gp * δξi + ∇δξ_i_l_α * γ[α]) * dΩ
+                    f_ξos[α_offset + i] += - 1/Ω * (go_gp * δξi + ∇δξ_i_l_α * γ[α]) * dΩ
                 end
 
                 # K_ξu
@@ -201,12 +213,11 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
                     ∇δξAγεs_⟂ = ∇δξ_i_s_α * Aγεs[α]
                     ∇δξAγεs_o = ∇δξ_i_l_α * Aγεs[α]
                     for j in 1:nbasefuncs_u
-                            K_ξ⟂su[α_offset + i, j] += - (∇δξAγεs_⟂ ⊡ δε[j]) * dΩ
+                            K_ξ⟂su[α_offset + i, j] += - 1/Ω * (∇δξAγεs_⟂ ⊡ δε[j]) * dΩ
                         if dim == 3
-                            K_ξosu[α_offset + i, j] += - (∇δξAγεs_o ⊡ δε[j]) * dΩ
+                            K_ξosu[α_offset + i, j] += - 1/Ω * (∇δξAγεs_o ⊡ δε[j]) * dΩ
                         end
                     end
-
 
                     for β in 1:nslip
                         # K_ξξ diag
@@ -217,19 +228,17 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
                             ∇δξ_j_s_β = ∇δξj ⋅ mp.s[β]
                             ∇δξ_j_l_β = ∇δξj ⋅ mp.l[β]
                             if α == β
-                                c = -δξi / (mp.H⟂ * mp.lα^2) * δξj * dΩ
-
-                                K_ξ⟂sξ⟂s[α_offset + i, β_offset + j] += -δξi / (mp.H⟂ * mp.lα^2) * δξj * dΩ
+                                K_ξ⟂sξ⟂s[α_offset + i, β_offset + j] += - 1/Ω * δξi  / (mp.H⟂ * mp.lα^2) * δξj * dΩ
                             end
-                            K_ξ⟂sξ⟂s[α_offset + i, β_offset + j] += - ∇δξ_i_s_α * Aγξ⟂[α, β] * ∇δξ_j_s_β * dΩ
+                            K_ξ⟂sξ⟂s[α_offset + i, β_offset + j] += - 1/Ω * ∇δξ_i_s_α * Aγξ⟂[α, β] * ∇δξ_j_s_β * dΩ
 
                             if dim == 3
                                 if α == β
-                                    K_ξosξos[α_offset + i, β_offset + j] += -δξi / (mp.Ho * mp.lα^2) * δξj * dΩ
+                                    K_ξosξos[α_offset + i, β_offset + j] += - 1/Ω * δξi / (mp.Ho * mp.lα^2) * δξj * dΩ
                                 end
-                                K_ξosξos[α_offset + i, β_offset + j] += -∇δξ_i_l_α * Aγξo[α, β] * ∇δξ_j_l_β * dΩ
-                                K_ξ⟂sξos[α_offset + i, β_offset + j] += -∇δξ_i_s_α * Aγξo[α, β] * ∇δξ_j_l_β * dΩ
-                                K_ξosξ⟂s[α_offset + i, β_offset + j] += -∇δξ_i_l_α * Aγξ⟂[α, β] * ∇δξ_j_s_β * dΩ
+                                K_ξosξos[α_offset + i, β_offset + j] += - 1/Ω * ∇δξ_i_l_α * Aγξo[α, β] * ∇δξ_j_l_β * dΩ
+                                K_ξ⟂sξos[α_offset + i, β_offset + j] += - 1/Ω * ∇δξ_i_s_α * Aγξo[α, β] * ∇δξ_j_l_β * dΩ
+                                K_ξosξ⟂s[α_offset + i, β_offset + j] += - 1/Ω * ∇δξ_i_l_α * Aγξ⟂[α, β] * ∇δξ_j_s_β * dΩ
                             end
                         end
                     end # compute_stiffness
@@ -240,5 +249,5 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
 
     end # inbounds
 
-    return f, K
+    return f, C_f, K, C_K
 end

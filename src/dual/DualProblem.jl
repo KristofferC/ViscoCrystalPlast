@@ -2,7 +2,11 @@ const u◫ = Block(1); const ξ⟂◫ = Block(2); const ξo◫ = Block(3)
 const γ◫ = Block(1); const τ◫ = Block(2)
 const ε◫ = Block(1); const χ⟂◫ = Block(2); const χo◫ = Block(3)
 
+@enum BoundaryCondition Dirichlet Neumann
+
 immutable DualGlobalProblem{dim, T, N}
+    problem_type::BoundaryCondition
+    Ω::Float64
     u_nodes::Vector{T}
     ξ⟂_nodes::Vector{Vector{T}}
     ξo_nodes::Vector{Vector{T}}
@@ -27,7 +31,7 @@ immutable DualGlobalProblem{dim, T, N}
 end
 
 
-function DualGlobalProblem{dim}(nslips::Int, fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim})
+function DualGlobalProblem{dim}(nslips::Int, problemtype::BoundaryCondition, Ω::Number, fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim})
     T = Float64
 
     nbasefuncs_ξ = getnbasefunctions(fev_ξ)
@@ -73,9 +77,10 @@ function DualGlobalProblem{dim}(nslips::Int, fev_u::CellVectorValues{dim}, fev_�
     DAγξ⟂s = [zero(SymmetricTensor{2, dim, T}) for α in 1:nslips]
     DAγξos = [zero(SymmetricTensor{2, dim, T}) for α in 1:nslips]
 
-    return DualGlobalProblem(u, ξ⟂s, ξos, # Nodal unknowns
-                            f, C_f # Forces
-                            K, C_K # Tangents
+    return DualGlobalProblem(problemtype, Ω,
+                            u, ξ⟂s, ξos, # Nodal unknowns
+                            f, C_f, # Forces
+                            K, C_K, # Tangents
                             u_dofs, ξ⟂_dofs, ξo_dofs, # Dofs
                             χ⟂, χo, Aγεs, δε, DAγξ⟂s, DAγξos) # Misc
 
