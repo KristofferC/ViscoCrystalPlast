@@ -17,7 +17,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
     free = dbcs.free_dofs
     ∆u = 0.0001 * rand(total_dofs)
     u = zeros(∆u)
-    ∆σ_bar = zeros(9) # tovoigt(convert(Tensor{2,dim}, mps[1].Ee ⊡ ɛ_bar))
+    ∆σ_bar = tovoigt(convert(Tensor{2,dim}, mps[1].Ee ⊡ ɛ_bar))
     ∆∆σ_bar = similar(∆σ_bar)
     σ_bar = zeros(∆σ_bar)
     apply_zero!(∆u, dbcs)
@@ -60,9 +60,9 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             end
 
             if use_Neumann && problem.global_problem.problem_type == Neumann
-                K = [K      C_K
+                KK = [K      C_K
                      C_K' zeros(9,9)]
-                f = [f; C]
+                ff = [f; C]
             end
 
 
@@ -73,23 +73,24 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             full_residuals[free] = f[free]
 
             println("Step: $nstep, iter: $iter")
-            print("Error: ")
-            print_residuals(dofhandler, full_residuals)
+            #print("Error: ")
+            #print_residuals(dofhandler, full_residuals)
 
+            apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
 
             @timeit "factorization" begin
-                ∆∆u = K \ f # solveMUMPS(K, f, 1, 1);
+                ∆∆u = KK \ ff # solveMUMPS(K, f, 1, 1);
             end
 
             if use_Neumann && problem.global_problem.problem_type == Neumann
-                ∆∆u = ∆∆u[1:end-9]
                 ∆∆σ_bar = ∆∆u[end-8:end]
+                ∆∆u = ∆∆u[1:end-9]
                 ∆σ_bar .-= ∆∆σ_bar
                 @assert length(∆σ_bar) == 9
             end
 
-            @show ∆∆σ_bar
+            @show C
 
             @show length(∆∆u)
             @show ndofs(dbcs.dh)
@@ -100,13 +101,13 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
         end
 
         copy!(un, u)
-        copy!(σ_bar_n, σ_bar_n)
+        copy!(σ_bar_n, σ_bar)
 
         # temp_mss is now the true matstats
         mss, temp_mss = temp_mss, mss
         exporter(t, u, mss)
     end
-    return u, mss
+    return u, σ_bar_n, mss
 end
 
 using Calculus
@@ -142,7 +143,7 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_b
             fe(field) = intf(problem, field, un_e, ɛ_bar, σ_bar, element_coords,
                             fev_u, fev_ξ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
 
-
+            #=
             function fee(uσ)
                 uz = uσ[1:ndofs_per_cell(dofhandler)]
                 σ = uσ[ndofs_per_cell(dofhandler)+1:end]
@@ -158,6 +159,7 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_b
 
             Ke = Kee[1:ndofs_per_cell(dofhandler), 1:ndofs_per_cell(dofhandler)]
             C_Ke = Kee[1:ndofs_per_cell(dofhandler), ndofs_per_cell(dofhandler)+1:end]
+            =#
 
             @timeit "intf" begin
                 fe_int, C_f, Ke, C_Ke = fe(u_e)
