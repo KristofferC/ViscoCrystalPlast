@@ -1,5 +1,5 @@
 function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::DofHandler, dbcs::DirichletBoundaryConditions,
-                            fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, mps::Vector, timesteps, exporter, polys, ɛ_bar)
+                            fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, mps::Vector, timesteps, exporter, polys, ɛ_bar_f)
 
     @timeit "sparsity pattern" begin
         K = create_sparsity_pattern(dofhandler)
@@ -17,12 +17,12 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
     free = dbcs.free_dofs
     ∆u = 0.0001 * rand(total_dofs)
     u = zeros(∆u)
-    ∆σ_bar = tovoigt(convert(Tensor{2,dim}, mps[1].Ee ⊡ ɛ_bar))
-    ∆∆σ_bar = similar(∆σ_bar)
-    σ_bar = zeros(∆σ_bar)
+    ∆∆σ_bar = zeros(dim*dim)
+    σ_bar = zeros(∆∆σ_bar)
+    σ_bar_n = zeros(∆∆σ_bar)
     apply_zero!(∆u, dbcs)
     un = zeros(total_dofs)
-    σ_bar_n = zeros(∆σ_bar)
+
     # Guess
 
     full_residuals = zeros(total_dofs)
@@ -40,7 +40,11 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
     use_Neumann = true
     t_prev = timesteps[1]
+    ɛ_bar_p = ɛ_bar_f(first(timesteps))
     for (nstep, t) in enumerate(timesteps[2:end])
+        ɛ_bar = ɛ_bar_f(t)
+        ∆σ_bar = tovoigt(convert(Tensor{2,dim}, mps[1].Ee ⊡ (ɛ_bar - ɛ_bar_p)))
+        ɛ_bar_p = ɛ_bar
         dt = t - t_prev
         t_prev = t
         println("Step $nstep, t = $t, dt = $dt")
@@ -51,7 +55,8 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
         iter = 1
         max_iters = 10
 
-        while iter == 1 || (norm(f[free]./f_sq[free], Inf)  >= 1e-5 && norm(f[free], Inf) >= 1e-8) || (problem.global_problem.problem_type == Neumann && use_Neumann && norm(C ./ C_sq, Inf)  >= 1e-5)
+        while iter == 1 || (norm(f[free]./f_sq[free], Inf)  >= 1e-5 && norm(f[free], Inf) >= 1e-8) ||
+                            (problem.global_problem.problem_type == Neumann && use_Neumann && norm(C ./ C_sq, Inf)  >= 1e-5 && norm(C, Inf) > 1e-6)
             u .= un .+ ∆u
             σ_bar .= σ_bar_n .+ ∆σ_bar
             @timeit "assemble" begin
@@ -63,6 +68,9 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                 KK = [K      C_K
                      C_K' zeros(9,9)]
                 ff = [f; C]
+            else
+              KK = K
+              ff = f
             end
 
 
@@ -70,11 +78,16 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                 error("Newton iterations did not converge")
             end
 
+            @show norm(f[free]./f_sq[free], Inf)
+            @show norm(f[free], Inf)
+            @show norm(C ./ C_sq, Inf)
+            println("----")
+
             full_residuals[free] = f[free]
 
             println("Step: $nstep, iter: $iter")
-            #print("Error: ")
-            #print_residuals(dofhandler, full_residuals)
+            print("Error: ")
+            print_residuals(dofhandler, full_residuals)
 
             apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
