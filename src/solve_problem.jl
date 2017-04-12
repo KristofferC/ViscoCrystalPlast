@@ -38,9 +38,9 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
         temp_mss = [CrystPlastDualQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
     #end
 
-    #ps = MKLPardisoSolver()
-    #set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
-    #pardisoinit(ps)
+    ps = MKLPardisoSolver()
+    set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
+    pardisoinit(ps)
     use_Neumann = true
     t_prev = timesteps[1]
     ɛ_bar_p = ɛ_bar_f(first(timesteps))
@@ -83,7 +83,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
               first_fact = false
               K_pardiso = get_matrix(ps, KK, :N)
               set_phase!(ps, Pardiso.ANALYSIS)
-              pardiso(ps, K_pardiso, z)
+              pardiso(ps, K_pardiso, ff)
             end
 
 
@@ -105,7 +105,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
             @timeit "factorization" begin
-                #=
+
                 @timeit "pardiso" begin
                   K_pardiso = get_matrix(ps, KK, :N)
                   set_phase!(ps, Pardiso.NUM_FACT)
@@ -113,17 +113,21 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                   set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
                   X = similar(ff) # Solution is stored in X
                   pardiso(ps, X, K_pardiso, ff)
+                  ∆∆u = X
                 end
 
                 @timeit "MUMPS"  begin
-                  solveMUMPS(KK, ff, 1);
+                  ∆∆u2 = solveMUMPS(KK, ff, 1);
                 end
-                =#
 
-              #  @timeit "SUITSPARSE" begin
-              #  @show "solving sparse"
-                  ∆∆u = KK \ ff #
-            #    end
+                @timeit "SUITSPARSE" begin
+                  ∆∆u3 = KK \ ff #
+                end
+            end
+
+            if iter > 5
+              print_timer()
+              error()
             end
 
             if use_Neumann && problem.global_problem.problem_type == Neumann
@@ -132,11 +136,6 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                 ∆σ_bar .-= ∆∆σ_bar
                 @assert length(∆σ_bar) == 9
             end
-
-            @show C
-
-            @show length(∆∆u)
-            @show ndofs(dbcs.dh)
 
             apply_zero!(∆∆u, dbcs)
             ∆u .-= ∆∆u
