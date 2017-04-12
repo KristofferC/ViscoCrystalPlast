@@ -6,6 +6,7 @@ using ProgressMeter
 using Parameters
 using ForwardDiff
 using TimerOutputs
+using Pardiso
 using FileIO
 using BlockArrays
 import JuAFEM.vtk_point_data

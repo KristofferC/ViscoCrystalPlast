@@ -38,9 +38,13 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
         temp_mss = [CrystPlastDualQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
     #end
 
+    #ps = MKLPardisoSolver()
+    #set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
+    #pardisoinit(ps)
     use_Neumann = true
     t_prev = timesteps[1]
     ɛ_bar_p = ɛ_bar_f(first(timesteps))
+    first_fact = true
     for (nstep, t) in enumerate(timesteps[2:end])
         ɛ_bar = ɛ_bar_f(t)
         ∆σ_bar = tovoigt(convert(Tensor{2,dim}, mps[1].Ee ⊡ (ɛ_bar - ɛ_bar_p)))
@@ -64,6 +68,8 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                                        mesh, dofhandler, dbcs, mps, mss, temp_mss, dt, polys)
             end
 
+
+
             if use_Neumann && problem.global_problem.problem_type == Neumann
                 KK = [K      C_K
                      C_K' zeros(9,9)]
@@ -71,6 +77,13 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             else
               KK = K
               ff = f
+            end
+
+            if first_fact == true
+              first_fact = false
+              K_pardiso = get_matrix(ps, KK, :N)
+              set_phase!(ps, Pardiso.ANALYSIS)
+              pardiso(ps, K_pardiso, z)
             end
 
 
@@ -91,9 +104,26 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
             apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
-
             @timeit "factorization" begin
-                ∆∆u = KK \ ff # solveMUMPS(K, f, 1, 1);
+                #=
+                @timeit "pardiso" begin
+                  K_pardiso = get_matrix(ps, KK, :N)
+                  set_phase!(ps, Pardiso.NUM_FACT)
+                  pardiso(ps, K_pardiso, ff)
+                  set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
+                  X = similar(ff) # Solution is stored in X
+                  pardiso(ps, X, K_pardiso, ff)
+                end
+
+                @timeit "MUMPS"  begin
+                  solveMUMPS(KK, ff, 1);
+                end
+                =#
+
+              #  @timeit "SUITSPARSE" begin
+              #  @show "solving sparse"
+                  ∆∆u = KK \ ff #
+            #    end
             end
 
             if use_Neumann && problem.global_problem.problem_type == Neumann
