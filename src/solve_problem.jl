@@ -105,29 +105,12 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
             @timeit "factorization" begin
-
-                @timeit "pardiso" begin
                   K_pardiso = get_matrix(ps, KK, :N)
                   set_phase!(ps, Pardiso.NUM_FACT)
                   pardiso(ps, K_pardiso, ff)
                   set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
-                  X = similar(ff) # Solution is stored in X
-                  pardiso(ps, X, K_pardiso, ff)
-                  ∆∆u = X
-                end
-
-                @timeit "MUMPS"  begin
-                  ∆∆u2 = solveMUMPS(KK, ff, 1);
-                end
-
-                @timeit "SUITSPARSE" begin
-                  ∆∆u3 = KK \ ff #
-                end
-            end
-
-            if iter > 5
-              print_timer()
-              error()
+                  ∆∆u  = similar(ff) # Solution is stored in X
+                  pardiso(ps, ∆∆u , K_pardiso, ff)
             end
 
             if use_Neumann && problem.global_problem.problem_type == Neumann
@@ -185,33 +168,10 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_b
             fe(field) = intf(problem, field, un_e, ɛ_bar, σ_bar, element_coords,
                             fev_u, fev_ξ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
 
-            #=
-            function fee(uσ)
-                uz = uσ[1:ndofs_per_cell(dofhandler)]
-                σ = uσ[ndofs_per_cell(dofhandler)+1:end]
-
-                fe_int, C_f, Ke, C_Ke = intf(problem, uz, un_e, ɛ_bar, σ, element_coords,
-                                fev_u, fev_ξ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
-
-                return [fe_int; C_f]
-            end
-
-            uσ = [u_e; σ_bar]
-            Kee = Calculus.jacobian(fee, uσ, :central)
-
-            Ke = Kee[1:ndofs_per_cell(dofhandler), 1:ndofs_per_cell(dofhandler)]
-            C_Ke = Kee[1:ndofs_per_cell(dofhandler), ndofs_per_cell(dofhandler)+1:end]
-            =#
 
             @timeit "intf" begin
                 fe_int, C_f, Ke, C_Ke = fe(u_e)
             end
-
-            #@show Ke
-            #@show size(Kee)
-            #@show size(Ke)
-            #@show C_f
-            #@show size(C_f)
 
             @timeit "assemble to global" begin
                 JuAFEM.assemble!(assembler, global_dofs, fe_int, Ke)
