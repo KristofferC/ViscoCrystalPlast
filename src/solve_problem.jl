@@ -165,21 +165,22 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_b
             ele_matstats = view(mss, :, element_id)
             temp_matstats = view(temp_mss, :, element_id)
 
-            fe(field) = intf(problem, field, un_e, ɛ_bar, σ_bar, element_coords,
-                            fev_u, fev_ξ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
-
-
             @timeit "intf" begin
-                fe_int, C_f, Ke, C_Ke = fe(u_e)
+                fe_int, C_f, Ke, C_Ke = intf(problem, u_e, un_e, ɛ_bar, σ_bar, element_coords,
+                                fev_u, fev_ξ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
             end
 
             @timeit "assemble to global" begin
-                JuAFEM.assemble!(assembler, global_dofs, fe_int, Ke)
-                JuAFEM.assemble!(f_int_sq, global_dofs, fe_int.^2)
-                C_int .+= C_f
-                C_int_sq .+= C_f .* C_f
-                for (i, dof) in enumerate(global_dofs[1:getnbasefunctions(fev_u)])
-                    C_K[dof, :] += C_Ke[i, :]
+                @timeit "assem Kefe" begin
+                  JuAFEM.assemble!(assembler, fe_int, Ke, global_dofs)
+                  JuAFEM.assemble!(f_int_sq, fe_int.^2, global_dofs)
+                end
+                @timeit "assem C" begin
+                  C_int .+= C_f
+                  C_int_sq .+= C_f .* C_f
+                  for (i, dof) in enumerate(global_dofs[1:getnbasefunctions(fev_u)])
+                      C_K[dof, :] += C_Ke[i, :]
+                  end
                 end
             end
         end
