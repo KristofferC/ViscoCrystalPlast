@@ -172,8 +172,8 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_b
 
             @timeit "assemble to global" begin
                 @timeit "assem Kefe" begin
-                  JuAFEM.assemble!(assembler, fe_int, Ke, global_dofs)
-                  JuAFEM.assemble!(f_int_sq, fe_int.^2, global_dofs)
+                  JuAFEM.assemble!(assembler, global_dofs, fe_int, Ke)
+                  JuAFEM.assemble!(f_int_sq, global_dofs, fe_int.^2)
                 end
                 @timeit "assem C" begin
                   C_int .+= C_f
