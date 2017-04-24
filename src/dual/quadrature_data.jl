@@ -21,6 +21,10 @@ function CrystPlastDualQD{dim}(nslip, ::Type{Dim{dim}})
     return CrystPlastDualQD(σ, ε, ε_p, τ_di, τ, γ, χ⟂, χo)
 end
 
+function Base.copy(qd::CrystPlastDualQD)
+    CrystPlastDualQD(qd.σ, qd.ε, qd.ε_p, copy(qd.τ_di), copy(qd.τ), copy(qd.γ), copy(qd.χ⟂), copy(qd.χo))
+end
+
 get_type{dim, T, M}(::Type{CrystPlastDualQD{dim, T, M}}) = CrystPlastDualQD
 
 function Base.:*(n::Number, qd::CrystPlastDualQD)
