@@ -35,6 +35,9 @@ else
     end
 end
 
+immutable IterationException <: Exception
+end
+
 @compat abstract type QuadratureData end
 
 include("material_parameters.jl")

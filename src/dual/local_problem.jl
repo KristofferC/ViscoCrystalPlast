@@ -160,7 +160,7 @@ function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
             problem.inner[i] -= problem.R[i]
         end
         if n_iters == max_iters
-            error("Non conv mat")
+            throw(IterationException())
         end
         n_iters +=1
     end

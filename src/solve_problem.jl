@@ -108,7 +108,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
 
             if iter > max_iters
-                error("Newton iterations did not converge")
+                throw(IterationException())
             end
 
             apply_zero!(KK, ff, dbcs)
