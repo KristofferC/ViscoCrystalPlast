@@ -78,6 +78,10 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             @show norm(f[free]) / length(f)
             @show norm(C, Inf)
 
+            if norm(f[free]) / length(f) < 1e-12
+                break
+            end
+
             println("----")
 
 
