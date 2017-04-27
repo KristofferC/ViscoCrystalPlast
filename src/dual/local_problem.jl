@@ -151,7 +151,7 @@ function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
         update_problem!(problem, ∆t, mp, ms)
         res = norm(Array(problem.R), Inf)
 
-        if res  <= 1e-9
+        if res  <= 1e-6
             break
         end
 
