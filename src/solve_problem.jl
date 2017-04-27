@@ -75,6 +75,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             print_residuals(dofhandler, full_residuals)
 
             @show norm(f[free], Inf)
+            @show norm(f[free]) / length(f)
             @show norm(C, Inf)
 
             println("----")
