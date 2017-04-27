@@ -86,7 +86,7 @@ function consistent_tangent{dim}(out::Vector, problem::DualLocalProblem{dim}, �
     copy!(Array(problem.outer), out)
 
     update_problem!(problem, ∆t, mp, ms)
-    @assert norm(problem.R) <= 1e-8
+    @assert norm(problem.R) <= 1e-5
     update_ats!(problem, ∆t, mp, ms)
     A = Array(problem.J) \ Array(problem.Q)
     scale!(A, -1)
