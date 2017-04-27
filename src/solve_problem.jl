@@ -41,7 +41,6 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
     ps = MKLPardisoSolver()
     set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
     pardisoinit(ps)
-    use_Neumann = true
     t_prev = timesteps[1]
     ɛ_bar_p = ɛ_bar_f(first(timesteps))
     first_fact = true
@@ -59,8 +58,8 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
         iter = 1
         max_iters = 10
 
-        while iter == 1 || (norm(f[free]./f_sq[free], Inf)  >= 1e-5 && norm(f[free], Inf) >= 1e-8) ||
-                            (problem.global_problem.problem_type == Neumann && use_Neumann && norm(C ./ C_sq, Inf)  >= 1e-5 && norm(C, Inf) > 1e-6)
+        while true #iter == 1 || (norm(f[free]./f_sq[free], Inf)  >= 1e-5 && norm(f[free], Inf) >= 1e-8) ||
+                    #        (problem.global_problem.problem_type == Neumann && use_Neumann && norm(C ./ C_sq, Inf)  >= 1e-5 && )
             u .= un .+ ∆u
             σ_bar .= σ_bar_n .+ ∆σ_bar
             @timeit "assemble" begin
@@ -68,9 +67,29 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                                        mesh, dofhandler, dbcs, mps, mss, temp_mss, dt, polys)
             end
 
+            U_conv = norm(f[free], Inf) <= 1e-8
+            C_conv = norm(C, Inf) < 1e-6
 
+            println("Step: $nstep, iter: $iter")
+            print("Error: ")
+            print_residuals(dofhandler, full_residuals)
 
-            if use_Neumann && problem.global_problem.problem_type == Neumann
+            @show norm(f[free], Inf)
+            @show norm(C, Inf)
+
+            println("----")
+
+            full_residuals[free] = f[free]
+
+            if problem.global_problem.problem_type == Neumann
+                if U_conv && C_conv
+                    break
+                end
+            elseif U_conv
+                break
+            end
+
+            if problem.global_problem.problem_type == Neumann
                 KK = [K      C_K
                      C_K' zeros(9,9)]
                 ff = [f; C]
@@ -91,16 +110,8 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                 error("Newton iterations did not converge")
             end
 
-            @show norm(f[free]./f_sq[free], Inf)
-            @show norm(f[free], Inf)
-            @show norm(C ./ C_sq, Inf)
-            println("----")
 
-            full_residuals[free] = f[free]
 
-            println("Step: $nstep, iter: $iter")
-            print("Error: ")
-            print_residuals(dofhandler, full_residuals)
 
             apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
@@ -113,7 +124,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                   pardiso(ps, ∆∆u , K_pardiso, ff)
             end
 
-            if use_Neumann && problem.global_problem.problem_type == Neumann
+            if problem.global_problem.problem_type == Neumann
                 ∆∆σ_bar = ∆∆u[end-8:end]
                 ∆∆u = ∆∆u[1:end-9]
                 ∆σ_bar .-= ∆∆σ_bar
