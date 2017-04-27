@@ -69,7 +69,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
             U_conv = norm(f[free], Inf) <= 1e-8
             C_conv = norm(C, Inf) < 1e-6
-
+            full_residuals[free] = f[free]
             println("Step: $nstep, iter: $iter")
             print("Error: ")
             print_residuals(dofhandler, full_residuals)
@@ -79,7 +79,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
             println("----")
 
-            full_residuals[free] = f[free]
+
 
             if problem.global_problem.problem_type == Neumann
                 if U_conv && C_conv
@@ -109,9 +109,6 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             if iter > max_iters
                 error("Newton iterations did not converge")
             end
-
-
-
 
             apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
