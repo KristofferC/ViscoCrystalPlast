@@ -90,6 +90,11 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                 conv = true
             end
 
+            if iter > 1 && norm(∆∆u) / length(∆∆u) <= 1e-10
+                conv = true
+                c_case = 3
+            end
+
             if conv
                 println("Converged in $iter iterations due to c_case = $c_case.")
                 break
