@@ -57,7 +57,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
         iter = 1
         max_iters = 10
-
+        io = IOBuffer()
         while true #iter == 1 || (norm(f[free]./f_sq[free], Inf)  >= 1e-5 && norm(f[free], Inf) >= 1e-8) ||
                     #        (problem.global_problem.problem_type == Neumann && use_Neumann && norm(C ./ C_sq, Inf)  >= 1e-5 && )
             u .= un .+ ∆u
@@ -67,31 +67,43 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                                        mesh, dofhandler, dbcs, mps, mss, temp_mss, dt, polys)
             end
 
+
+
             U_conv = norm(f[free], Inf) <= 1e-8
             C_conv = norm(C, Inf) < 1e-6
             full_residuals[free] = f[free]
-            println("Step: $nstep, iter: $iter")
-            print("Error: ")
-            print_residuals(dofhandler, full_residuals)
+            print_residuals(io, dofhandler, full_residuals)
 
-            @show norm(f[free], Inf)
-            @show norm(f[free]) / length(f)
-            @show norm(C, Inf)
 
-            if norm(f[free]) / length(f) < 1e-12
+            conv = false
+            c_case = 0
+            if problem.global_problem.problem_type == Neumann
+                if U_conv && C_conv
+                    c_case = 1
+                    conv = true
+                end
+            elseif U_conv
+                conv = true
+                c_case = 1
+            elseif norm(f[free]) / length(f) < 1e-12
+                c_case = 2
+                conv = true
+            end
+
+            if conv
+                println("Converged in $iter iterations due to c_case = $c_case.")
                 break
             end
 
-            println("----")
-
-
-
-            if problem.global_problem.problem_type == Neumann
-                if U_conv && C_conv
-                    break
-                end
-            elseif U_conv
-                break
+            if iter > max_iters
+                println("Failed to converge with:")
+                @show U_conv
+                @show C_conv
+                @show norm(f[free]) / length(f)
+                @show norm(f[free], Inf)
+                @show norm(C, Inf)
+                println(String(take!(io)))
+                throw(IterationException())
             end
 
             if problem.global_problem.problem_type == Neumann
@@ -108,11 +120,6 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
               K_pardiso = get_matrix(ps, KK, :N)
               set_phase!(ps, Pardiso.ANALYSIS)
               pardiso(ps, K_pardiso, ff)
-            end
-
-
-            if iter > max_iters
-                throw(IterationException())
             end
 
             apply_zero!(KK, ff, dbcs)
@@ -155,18 +162,20 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_b
                         bcs::DirichletBoundaryConditions, mps::Vector, mss, temp_mss, dt::Float64, polys::Vector{Int})
 
     #@assert length(u) == length(dofs.dof_ids)
-    total_dofs = size(K,1)
-    n_dofs_u = dofhandler.ndofs[1]
+    @timeit "setup assemble" begin
+        total_dofs = size(K,1)
+        n_dofs_u = dofhandler.ndofs[1]
 
-    global_dofs = zeros(Int, ndofs_per_cell(dofhandler))
-    f_int = zeros(total_dofs)
-    f_int_sq = zeros(total_dofs)
-    C_int = zeros(9)
-    C_int_sq = zeros(9)
-    C_K = zeros(total_dofs, 9)
-    # Internal force vector
-    assembler = start_assemble(K, f_int)
-    println("assembling...")
+        global_dofs = zeros(Int, ndofs_per_cell(dofhandler))
+        f_int = zeros(total_dofs)
+        f_int_sq = zeros(total_dofs)
+        C_int = zeros(9)
+        C_int_sq = zeros(9)
+        C_K = zeros(total_dofs, 9)
+        # Internal force vector
+        assembler = start_assemble(K, f_int)
+    end
+
     @timeit "assemble loop" begin
         for element_id in 1:getncells(mesh)
             celldofs!(global_dofs, dofhandler, element_id)
