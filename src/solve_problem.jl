@@ -102,6 +102,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
             if iter > max_iters
                 println("Failed to converge with:")
+                @show norm(∆∆u) / length(∆∆u)
                 @show U_conv
                 @show C_conv
                 @show norm(f[free]) / length(f)
