@@ -85,7 +85,9 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             elseif U_conv
                 conv = true
                 c_case = 1
-            elseif norm(f[free]) / length(f) < 1e-12
+            end
+
+            if norm(f[free]) / length(f) < 1e-6
                 c_case = 2
                 conv = true
             end
@@ -97,17 +99,19 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
             if conv
                 println("Converged in $iter iterations due to c_case = $c_case.")
+                @show norm(f[free], Inf)
+                @show norm(C, Inf)
+                @show norm(f[free]) / length(f)
+                @show norm(∆∆u) / length(∆∆u)
                 break
             end
 
             if iter > max_iters
                 println("Failed to converge with:")
-                @show norm(∆∆u) / length(∆∆u)
-                @show U_conv
-                @show C_conv
-                @show norm(f[free]) / length(f)
                 @show norm(f[free], Inf)
                 @show norm(C, Inf)
+                @show norm(f[free]) / length(f)
+                @show norm(∆∆u) / length(∆∆u)
                 println(String(take!(io)))
                 throw(IterationException())
             end

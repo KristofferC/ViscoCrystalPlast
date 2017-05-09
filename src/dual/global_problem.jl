@@ -105,18 +105,49 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
         ε_e = ε - ε_p
         σ = mp.Ee ⊡ ε_e
 
+
+        χ_π = 0.0
+        ϕ_π = 0.0
+        τ_π = 0.0
+        ψg = 0.0
+        ψe = 1/2 * ε_e ⊡ mp.Ee ⊡ ε_e
         if T == Float64
             temp_ms.σ  = σ
             temp_ms.ε  = ε
             temp_ms.ε_p = ε_p
             for α in 1:nslip
+                ξ⟂ = function_value(fev_ξ, q_point, ξ⟂_nodes[α])
+                ξo = function_value(fev_ξ, q_point, ξo_nodes[α])
+                τ = (σ ⊡ mp.sxm_sym[α])
+                Δγ = γ[α] - ms.γ[α]
+                ψg += (1/2 * 1 / mp.lα^2) * (1/mp.H⟂ * ξ⟂^2 + 1/mp.Ho * ξo^2)
+                τ_π += τ_di[α] * Δγ
+                χ_π += (χ⟂[α] + χo[α]) * γ[α]
+                ϕ_π += dt * 1/mp.tstar * mp.C/(mp.n+1) * (abs(τ)/mp.C)^(mp.n+1)
+
                 temp_ms.χ⟂[α] = χ⟂[α]
                 temp_ms.χo[α] = χo[α]
                 temp_ms.τ_di[α] = τ_di[α]
                 temp_ms.γ[α] = γ[α]
-                temp_ms.τ[α] = (σ ⊡ mp.sxm_sym[α])
+                temp_ms.τ[α] = τ
             end
+
+            temp_ms.ψek = ms.ψe
+            temp_ms.ψgk = ms.ψg
+
+            φ = ψe - ψg
+            φk = ms.ψe - ms.ψg
+
+            temp_ms.ψe = ψe
+            temp_ms.ψg = ψg
+            temp_ms.χ_π = χ_π
+            temp_ms.ϕ_π = ϕ_π
+            temp_ms.τ_π = τ_π
+            temp_ms.π = φ - φk + τ_π - χ_π - ϕ_π
+
         end
+
+
 
         @timeit "consistent tangent" begin
             A = consistent_tangent(Y, dual_prob.local_problem, dt, mp, ms, temp_ms)
