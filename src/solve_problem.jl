@@ -56,7 +56,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
         apply!(un, dbcs) # Make primary field obey BC
 
         iter = 1
-        max_iters = 10
+        max_iters = 15
         io = IOBuffer()
         while true #iter == 1 || (norm(f[free]./f_sq[free], Inf)  >= 1e-5 && norm(f[free], Inf) >= 1e-8) ||
                     #        (problem.global_problem.problem_type == Neumann && use_Neumann && norm(C ./ C_sq, Inf)  >= 1e-5 && )
@@ -97,12 +97,15 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                 c_case = 3
             end
 
+            if iter < 3
+                conv = false
+            end
+
             if conv
                 println("Converged in $iter iterations due to c_case = $c_case.")
                 @show norm(f[free], Inf)
                 @show norm(C, Inf)
                 @show norm(f[free]) / length(f)
-                @show norm(∆∆u) / length(∆∆u)
                 break
             end
 
