@@ -86,7 +86,7 @@ function consistent_tangent{dim}(out::Vector, problem::DualLocalProblem{dim}, �
     copy!(Array(problem.outer), out)
 
     update_problem!(problem, ∆t, mp, ms)
-    @assert norm(problem.R) <= 1e-8
+    @assert norm(problem.R) <= 1e-5
     update_ats!(problem, ∆t, mp, ms)
     A = Array(problem.J) \ Array(problem.Q)
     scale!(A, -1)
@@ -151,7 +151,7 @@ function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
         update_problem!(problem, ∆t, mp, ms)
         res = norm(Array(problem.R), Inf)
 
-        if res  <= 1e-9
+        if res  <= 1e-6
             break
         end
 
@@ -160,7 +160,7 @@ function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
             problem.inner[i] -= problem.R[i]
         end
         if n_iters == max_iters
-            error("Non conv mat")
+            throw(IterationException())
         end
         n_iters +=1
     end

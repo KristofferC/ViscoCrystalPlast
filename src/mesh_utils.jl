@@ -289,7 +289,11 @@ function add_grad_dofs!{dim}(mesh::Grid{dim}, duplicated_nodes::Vector{Vector{In
     dofs_nodes = Matrix{Int}(dofs_per_node, length(all_nodes))
     fill!(dofs_nodes, -1)
     dof_number = 1
+    n_slip_dofs = 0
+    n_u_dofs = 0
     for n in nodes_without_slip
+        n_slip_dofs += grad_dofs * nslips
+        n_u_dofs += dim
         for dof in 1:dofs_per_node
             dofs_nodes[dof, n] = dof_number
             dof_number += 1
@@ -297,10 +301,12 @@ function add_grad_dofs!{dim}(mesh::Grid{dim}, duplicated_nodes::Vector{Vector{In
     end
     for dup_nodes in duplicated_nodes
         for i in 1:dim
+            # Same dof to duplicated dofs
             for node in dup_nodes
                 @dbg_assert dofs_nodes[i, node] == -1
                 dofs_nodes[i, node] = dof_number
             end
+            n_u_dofs += 1
             dof_number += 1
         end
 
@@ -309,15 +315,19 @@ function add_grad_dofs!{dim}(mesh::Grid{dim}, duplicated_nodes::Vector{Vector{In
                 @dbg_assert dofs_nodes[dim + i, node] == -1
                 dofs_nodes[dim + i, node] = dof_number
                 dof_number += 1
+                n_slip_dofs += 1
             end
         end
     end
+
+
 
     dh.dofs_nodes = dofs_nodes
     @dbg_assert findfirst(dofs_nodes, -1) == 0
 
     JuAFEM.add_element_dofs!(dh)
-    dh.ndofs = length(unique(vec(dh.dofs_nodes)))
+    dh.ndofs = [n_u_dofs, n_slip_dofs] #length(unique(vec(dh.dofs_nodes)))
+
     dh.closed[] = true
     return dh
 end

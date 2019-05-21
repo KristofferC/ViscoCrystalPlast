@@ -43,8 +43,8 @@ function Grid(mesh::AbaqusMesh, element_type::String)
     Grid(cells, nodes, cellsets = new_element_sets, nodesets = new_node_sets)
 end
 
-
-function print_residuals(dh::JuAFEM.DofHandler, f)
+print_residuals(dh::JuAFEM.DofHandler, f) = print_residuals(STDOUT, dh, f)
+function print_residuals(io::IO, dh::JuAFEM.DofHandler, f)
     nfields = length(dh.field_names)
     residuals = zeros(nfields)
     offset = 0
@@ -59,9 +59,9 @@ function print_residuals(dh::JuAFEM.DofHandler, f)
         residuals[i] = sqrt(residuals[i])
     end
 
-    print("|f|: ", @sprintf(": %6.5g ", norm(f)))
+    print(io, "|f|: ", @sprintf(": %6.5g ", norm(f)))
     for i in 1:nfields
-        print(dh.field_names[i], @sprintf(": %6.5g ", residuals[i]))
+        print(io, dh.field_names[i], @sprintf(": %6.5g ", residuals[i]))
     end
-    print("\n")
+    print(io, "\n")
 end
