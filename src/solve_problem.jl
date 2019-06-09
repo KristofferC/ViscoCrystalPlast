@@ -30,17 +30,17 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
     nslip = length(mps[1].s)
 
-#    if isa(problem, PrimalProblem)
-        #mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
-        #temp_mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
-    #else
+    if isa(problem, PrimalProblem)
+        mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
+        temp_mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
+    else
         mss = [CrystPlastDualQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
         temp_mss = [CrystPlastDualQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
-    #end
+    end
 
-    ps = MKLPardisoSolver()
-    set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
-    pardisoinit(ps)
+    #ps = MKLPardisoSolver()
+    #set_matrixtype!(ps, Pardiso.REAL_SYM_INDEF)
+    #pardisoinit(ps)
     t_prev = timesteps[1]
     ɛ_bar_p = ɛ_bar_f(first(timesteps))
     first_fact = true
@@ -128,22 +128,27 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
               ff = f
             end
 
+            #=
             if first_fact == true
               first_fact = false
               K_pardiso = get_matrix(ps, KK, :N)
               set_phase!(ps, Pardiso.ANALYSIS)
               pardiso(ps, K_pardiso, ff)
             end
+            =#
 
             apply_zero!(KK, ff, dbcs)
             apply_zero!(K, f, dbcs)
             @timeit "factorization" begin
-                  K_pardiso = get_matrix(ps, KK, :N)
-                  set_phase!(ps, Pardiso.NUM_FACT)
-                  pardiso(ps, K_pardiso, ff)
-                  set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
-                  ∆∆u  = similar(ff) # Solution is stored in X
-                  pardiso(ps, ∆∆u , K_pardiso, ff)
+                  #K_pardiso = get_matrix(ps, KK, :N)
+                  #set_phase!(ps, Pardiso.NUM_FACT)
+                  #pardiso(ps, K_pardiso, ff)
+                  #set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
+                  #∆∆u  = similar(ff) # Solution is stored in X
+                  @show size(K)
+                  @show size(KK)
+                  ∆∆u = KK \ ff
+                  #pardiso(ps, ∆∆u , K_pardiso, ff)
             end
 
             if problem.global_problem.problem_type == Neumann
@@ -168,7 +173,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
     return u, σ_bar_n, mss
 end
 
-using Calculus
+# using Calculus
 
 function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_bar, σ_bar,
                         fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, mesh::Grid, dofhandler::DofHandler,

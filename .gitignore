@@ -1,6 +1,5 @@
 *.vtk
 *.vtu
-vtks/
 *.pvd
 *.ipynb
 *.tex

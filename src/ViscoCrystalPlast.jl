@@ -6,12 +6,14 @@ using ProgressMeter
 using Parameters
 using ForwardDiff
 using TimerOutputs
-using Pardiso
+#using Pardiso
 using FileIO
 using BlockArrays
 import JuAFEM.vtk_point_data
-using MUMPS
+#using MUMPS
 using Compat
+
+immutable Dim{dim} end
 
 @compat abstract type AbstractProblem end
 
@@ -48,9 +50,8 @@ include("mesh_transfer.jl")
 include("mesh_utils.jl")
 include("utilities.jl")
 
-# include("primal/PrimalProblem.jl")
+include("primal/PrimalProblem.jl")
 
-#=
 immutable PrimalProblem{T} <: AbstractProblem
     global_problem::PrimalGlobalProblem{T}
 end
@@ -59,10 +60,9 @@ end
 function PrimalProblem{dim}(nslips, fev_u::CellVectorValues{dim}, fev_γ::CellScalarValues{dim})
     PrimalProblem(PrimalGlobalProblem(nslips, fev_u, fev_γ))
 end
-=#
 
-#include("primal/quadrature_data.jl")
-#include("primal/global_problem.jl")
+include("primal/quadrature_data.jl")
+include("primal/global_problem.jl")
 
 include("dual/DualProblem.jl")
 

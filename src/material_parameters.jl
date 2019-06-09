@@ -63,15 +63,12 @@ function CrystPlastMP{T}(::Type{Dim{3}}, E::T, ν::T, n::T, H⟂::T, Ho::T, lα:
     @assert length(s) == length(m)
 
     l = Vector{Vec{3, Float64}}(nslip)
-
     for α = 1:nslip
         l[α] = m[α] × s[α]
     end
 
     CrystPlastMP(Dim{3}, E, ν, n, H⟂, Ho, lα, tstar, C, s, m, l)
 end
-
-
 
 function CrystPlastMP{T}(::Type{Dim{3}}, E::T, ν::T, n::T, H⟂::T, Ho::T, lα::T, tstar::T, C::T, rotmats::Vector)
     dim = 3
