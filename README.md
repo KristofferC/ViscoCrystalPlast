@@ -37,6 +37,7 @@ Add `neper` to `PATH` so you can run it using only `neper` in the terminal. Can 
 sudo ln -s /PATH/TO/NEPER/neper/neper-3.4.0/src/neper /usr/local/bin/neper
 ```
 
+Note that I ran using Neper, 3.0.2 or something so things might have changed with Neper since then.
 
 ## 2. Install julia 0.6.
 
@@ -63,7 +64,7 @@ Pkg.clone("https://github.com/KristofferC/JuAFEM.jl.git")
 Pkg.checkout("JuAFEM", "kc/fix_dofs")
 ```
 
-The exakt versions I used are:
+The exact versions I used are:
 
 ```
 julia> Pkg.status()
@@ -118,7 +119,7 @@ In Julia, run `include("bin/genmesh.jl")` to generate a mesh to `bin/meshes`. Se
 
 ## 4. Run a simulation
 
-Run `include("bin/run_simulations.jl"). Different settings available in 
+Run `include("bin/run_simulations.jl")`. Different settings available in that file.
 
 ## 5. Analyze results
 
@@ -128,6 +129,7 @@ To check saved numerical result, run e.g.
 
 ```
 using JLD2
+using FileIO
 
 load(FileIO.File(format"JLD2", "bin/raw_data/shear_DN_3_dual_Neumann_nslips_12_ngrains_5_microhard.jld2"))
 ```
