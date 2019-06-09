@@ -121,9 +121,8 @@ function read_set!(f, sets, setname::AbstractString)
     sets[setname] = indices
 end
 
-function FileIO.load(fn::File{format"ABAQUS_INP"})
-    open(fn) do s
-        f = stream(s)
+function loadmesh(fn)
+    open(fn) do f
         node_numbers = Int[]
         coord_vec = Float64[]
 

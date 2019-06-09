@@ -1,7 +1,7 @@
 using DataStructures
 
 function create_mesh_and_dofhandler(inputfile, dim, nslips, probtype)
-    m = load(inputfile)
+    m = loadmesh(inputfile)
     m, old_to_new = ViscoCrystalPlast.update_mesh!(m, dim)
     condensed_mesh, duplicated_nodes = ViscoCrystalPlast.condense_mesh(m, old_to_new, dim)
     bulk_element_name = dim == 2 ? "CPE3" : "C3D4"

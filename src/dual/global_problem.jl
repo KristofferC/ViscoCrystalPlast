@@ -147,8 +147,6 @@ function intf{dim, T, QD <: CrystPlastDualQD}(dual_prob::DualProblem,
 
         end
 
-
-
         @timeit "consistent tangent" begin
             A = consistent_tangent(Y, dual_prob.local_problem, dt, mp, ms, temp_ms)
         end

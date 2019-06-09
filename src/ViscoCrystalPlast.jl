@@ -2,9 +2,7 @@ module ViscoCrystalPlast
 
 using Tensors
 using JuAFEM
-using ProgressMeter
 using Parameters
-using ForwardDiff
 using TimerOutputs
 #using Pardiso
 using FileIO

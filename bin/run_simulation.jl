@@ -3,7 +3,8 @@ using Quaternions
 using Tensors
 using TimerOutputs
 using DataFrames
-using JLD
+# using JLD
+using JLD2
 
 # Check if we are running on a cluster
 const RUNNING_SLURM = haskey(ENV, "SLURM_JOBID")
@@ -158,7 +159,7 @@ function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 
 
     # Some simulation parameters
     Δt = 0.5
-    endt = 15.0
+    endt = 1.0
     times = 0.0:Δt:endt
     ɛend = 0.3
 
@@ -266,8 +267,9 @@ function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 
 
     # Export to JLD
     @timeit "export JLD" begin
+        print("exporting to $JLD_PATH")
         file_path = JLD_PATH
-        f = jldopen(string(file_path, ".jld"), "w")
+        f = JLD2.jldopen(string(file_path, ".jld2"), true, true, true, IOStream)
         write(f, "mps", mps)
         #write(f, "dofs", dofs)
         write(f, "seed", seed)
