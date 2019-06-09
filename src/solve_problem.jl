@@ -1,6 +1,6 @@
 function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::DofHandler, dbcs::DirichletBoundaryConditions,
                             fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, mps::Vector, timesteps, exporter, polys, ɛ_bar_f)
-
+    is_dual = problem isa DualProblem
     @timeit "sparsity pattern" begin
         K = create_sparsity_pattern(dofhandler)
     end
@@ -30,12 +30,12 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
     nslip = length(mps[1].s)
 
-    if isa(problem, PrimalProblem)
-        mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
-        temp_mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
-    else
+    if is_dual
         mss = [CrystPlastDualQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
         temp_mss = [CrystPlastDualQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
+    else
+        mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
+        temp_mss = [CrystPlastPrimalQD(nslip, Dim{dim}) for i = 1:n_qpoints, j = 1:getncells(mesh)]
     end
 
     #ps = MKLPardisoSolver()
@@ -62,19 +62,27 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                     #        (problem.global_problem.problem_type == Neumann && use_Neumann && norm(C ./ C_sq, Inf)  >= 1e-5 && )
             u .= un .+ ∆u
             σ_bar .= σ_bar_n .+ ∆σ_bar
+
             @timeit "assemble" begin
-                K, C_K, f, f_sq, C, C_sq = assemble!(problem, K, u, un, ɛ_bar, σ_bar, fev_u, fev_ξ,
-                                       mesh, dofhandler, dbcs, mps, mss, temp_mss, dt, polys)
+                if is_dual
+                    K, C_K, f, f_sq, C, C_sq = assemble!(problem, K, u, un, ɛ_bar, σ_bar, fev_u, fev_ξ,
+                                        mesh, dofhandler, dbcs, mps, mss, temp_mss, dt, polys)
+                else
+                    K, f, f_sq = assemble!(problem, K, u, un, ɛ_bar, σ_bar, fev_u, fev_ξ,
+                                    mesh, dofhandler, dbcs, mps, mss, temp_mss, dt, polys)
+                end
             end
 
             U_conv = norm(f[free], Inf) <= 1e-8
-            C_conv = norm(C, Inf) < 1e-6
+            if is_dual 
+                C_conv = norm(C, Inf) < 1e-6
+            end
             full_residuals[free] = f[free]
-            print_residuals(io, dofhandler, full_residuals)
+            print_residuals(STDOUT, dofhandler, full_residuals)
 
             conv = false
             c_case = 0
-            if problem.global_problem.problem_type == Neumann
+            if is_dual && problem.global_problem.problem_type == Neumann
                 if U_conv && C_conv
                     c_case = 1
                     conv = true
@@ -109,14 +117,14 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
             if iter > max_iters
                 println("Failed to converge with:")
                 @show norm(f[free], Inf)
-                @show norm(C, Inf)
+                is_dual && @show norm(C, Inf)
                 @show norm(f[free]) / length(f)
                 @show norm(∆∆u) / length(∆∆u)
                 println(String(take!(io)))
                 throw(IterationException())
             end
 
-            if problem.global_problem.problem_type == Neumann
+            if is_dual && problem.global_problem.problem_type == Neumann
                 KK = [K      C_K
                      C_K' zeros(9,9)]
                 ff = [f; C]
@@ -146,7 +154,7 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                   #pardiso(ps, ∆∆u , K_pardiso, ff)
             end
 
-            if problem.global_problem.problem_type == Neumann
+            if is_dual && problem.global_problem.problem_type == Neumann
                 ∆∆σ_bar = ∆∆u[end-8:end]
                 ∆∆u = ∆∆u[1:end-9]
                 ∆σ_bar .-= ∆∆σ_bar
@@ -171,9 +179,10 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 end
 
 function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_bar, σ_bar,
-                        fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, mesh::Grid, dofhandler::DofHandler,
+                        fev_u::CellVectorValues{dim}, fev_ξγ::CellScalarValues{dim}, mesh::Grid, dofhandler::DofHandler,
                         bcs::DirichletBoundaryConditions, mps::Vector, mss, temp_mss, dt::Float64, polys::Vector{Int})
 
+    is_dual = problem isa DualProblem
     #@assert length(u) == length(dofs.dof_ids)
     @timeit "setup assemble" begin
         total_dofs = size(K,1)
@@ -201,25 +210,36 @@ function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_b
             temp_matstats = view(temp_mss, :, element_id)
 
             @timeit "intf" begin
-                fe_int, C_f, Ke, C_Ke = intf(problem, u_e, un_e, ɛ_bar, σ_bar, element_coords,
-                                fev_u, fev_ξ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
+                if is_dual
+                    fe_int, C_f, Ke, C_Ke = intf(problem, u_e, un_e, ɛ_bar, σ_bar, element_coords,
+                                    fev_u, fev_ξγ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
+                else
+                    fe_int, Ke = intf(problem, u_e, un_e, element_coords,
+                                fev_u, fev_ξγ, dt, ele_matstats, temp_matstats, mps[polys[element_id]], true)
+                end
             end
 
             @timeit "assemble to global" begin
                 @timeit "assem Kefe" begin
-                  JuAFEM.assemble!(assembler, global_dofs, fe_int, Ke)
-                  JuAFEM.assemble!(f_int_sq, global_dofs, fe_int.^2)
+                    JuAFEM.assemble!(assembler, global_dofs, fe_int, Ke)
+                    JuAFEM.assemble!(f_int_sq, global_dofs, fe_int.^2)
                 end
-                @timeit "assem C" begin
-                  C_int .+= C_f
-                  C_int_sq .+= C_f .* C_f
-                  for (i, dof) in enumerate(global_dofs[1:getnbasefunctions(fev_u)])
-                      C_K[dof, :] += C_Ke[i, :]
-                  end
+                if is_dual
+                    @timeit "assem C" begin
+                        C_int .+= C_f
+                        C_int_sq .+= C_f .* C_f
+                        for (i, dof) in enumerate(global_dofs[1:getnbasefunctions(fev_u)])
+                            C_K[dof, :] += C_Ke[i, :]
+                        end
+                    end
                 end
             end
         end
     end
 
-    return K, C_K, f_int, f_int_sq, C_int, C_int_sq
+    if is_dual
+        return K, C_K, f_int, f_int_sq, C_int, C_int_sq
+    else
+        return K, f_int, f_int_sq
+    end
 end

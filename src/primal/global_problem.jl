@@ -47,14 +47,11 @@ function intf{dim, T, QD <: CrystPlastPrimalQD}(primal_prob::PrimalProblem,
 
     for q_point in 1:getnquadpoints(fev_u)
         dΩ = getdetJdV(fev_u, q_point)
-        δu = i -> shape_value(fev_u, q_point, i)
-        ∇δu = i -> shape_gradient(fev_u, q_point, i)
-        δγ = i -> shape_value(fev_γ, q_point, i)
-        ∇δγ = i -> shape_gradient(fev_γ, q_point, i)
-
+  
         ε = function_symmetric_gradient(fev_u, q_point, u_vec)
         for i in 1:nbasefuncs_u
-            δε[i] = symmetric(∇δu(i))
+            ∇δui = shape_gradient(fev_u, q_point, i)
+            δε[i] = symmetric(∇δui)
         end
 
         ε_p = zero(ε)
@@ -86,7 +83,8 @@ function intf{dim, T, QD <: CrystPlastPrimalQD}(primal_prob::PrimalProblem,
                     β_offset = nbasefuncs_γ * (β - 1)
                     δεEsm = δε[i] ⊡ mp.Esm[β]
                     for j in 1:nbasefuncs_γ
-                        K_uγs[i, β_offset + j] += - δεEsm * δγ(j) * dΩ
+                        δγj = shape_value(fev_γ, q_point, j)
+                        K_uγs[i, β_offset + j] += - δεEsm * δγj * dΩ
                     end # j
                 end # β
             end # stiffness
@@ -104,19 +102,24 @@ function intf{dim, T, QD <: CrystPlastPrimalQD}(primal_prob::PrimalProblem,
             α_offset = nbasefuncs_γ * (α - 1)
             # f_γ
             for i in 1:nbasefuncs_γ
-                f_γs[i + α_offset] += (δγ(i) * (τα + τ_en) + ∇δγ(i) ⋅ ξ) * dΩ
+                δγi = shape_value(fev_γ, q_point, i)
+                ∇δγi = shape_gradient(fev_γ, q_point, i)
+                f_γs[i + α_offset] += (δγi * (τα + τ_en) + ∇δγi ⋅ ξ) * dΩ
 
                 for j in 1:nbasefuncs_u
-                    K_γsu[i + α_offset, j] += - δγ(i) * (mp.Esm[α] ⊡ δε[j]) * dΩ
+                    K_γsu[i + α_offset, j] += - δγi * (mp.Esm[α] ⊡ δε[j]) * dΩ
                 end
                 # K_γu
                 for β in 1:nslip
                     β_offset = nbasefuncs_γ * (β - 1)
-                    ∇δγHgra = (∇δγ(i) ⋅ mp.Hgrad[β])
+                    ∇δγHgra = (∇δγi ⋅ mp.Hgrad[β])
                     for j in 1:nbasefuncs_γ
-                        K_γsγs[i + α_offset, j + β_offset] += (δγ(i) * mp.Dαβ[α, β] * δγ(j)) * dΩ
+                        δγj = shape_value(fev_γ, q_point, j)
+                        ∇δγj = shape_gradient(fev_γ, q_point, j)
+
+                        K_γsγs[i + α_offset, j + β_offset] += (δγi * mp.Dαβ[α, β] * δγj) * dΩ
                         if α == β
-                            K_γsγs[i + α_offset, j + β_offset] += (mp.lα^2 * (∇δγHgra ⋅ ∇δγ(j)) + δγ(i) * Aτγ[β] * δγ(j)) * dΩ
+                            K_γsγs[i + α_offset, j + β_offset] += (mp.lα^2 * (∇δγHgra ⋅ ∇δγj) + δγi * Aτγ[β] * δγj) * dΩ
                         end
                     end # j
                 end # β
@@ -143,25 +146,8 @@ function compute_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
     return sign(Δγ) * τ
 end
 
-#function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
-#    @unpack C, tstar, n = mp
-#    Δγ = γ_gp - γ_gp_prev
-#    C * (tstar / ∆t)^(1/n) * 1/n * abs(Δγ)^(1/n - 1)
-#end
-
-
-using Calculus
-
 function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
-    f(γ) = compute_tau(γ, γ_gp_prev, ∆t, mp)
-    return Calculus.derivative(f, γ_gp)
+    @unpack C, tstar, n = mp
+    Δγ = γ_gp - γ_gp_prev
+    C * (tstar / ∆t)^(1/n) * 1/n * abs(Δγ)^(1/n - 1)
 end
-
-
-#function diff_tau(γ_gp, γ_gp_prev, ∆t, mp::CrystPlastMP)
-#    @unpack C, tstar, n = mp
-#    Δγ = γ_gp - γ_gp_prev
-#    C * (tstar / ∆t)^(1/n) * 1/n * abs(Δγ)^(1/n - 1) * sign(Δγ)
-#    # C * (tstar / ∆t)^(1/n) * 1/n * Δγ^(1/n - 1) * Δγ / abs(Δγ)
-#end
-

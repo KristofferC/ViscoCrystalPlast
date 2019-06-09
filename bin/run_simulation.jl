@@ -12,8 +12,6 @@ const RUNNING_SLURM_ARRAY = haskey(ENV, "SLURM_ARRAY_TASK_ID")
 # Load the "package"
 include(joinpath(@__DIR__, "..", "src/ViscoCrystalPlast.jl"))
 
-import ViscoCrystalPlast.Dim
-
 # Function to set material parameters
 function setup_rand_BCC()
     s1 = Vec{3}((1., 1.,-1.)) / √3
@@ -131,19 +129,17 @@ function integrate_grains(f, mesh, cellvalues, polys)
 end
 
 # Run the actual simulation
-function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 0; do_vtk = true, xi_bc_type = :microhard)
+function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 0; do_vtk = true, bc = :microhard, probtype = :dual)
     reset_timer!()
     dim = 3
     # Can fix the seed if we want reproducability
     seed = rand(1:10000)
     srand(seed)
     nslips = 12
-    bc = xi_bc_type
-    probtype = :dual
     function_space = Lagrange{dim, RefTetrahedron, 1}()
     quad_rule = QuadratureRule{dim, RefTetrahedron}(1)
     fev_u = CellVectorValues(quad_rule, function_space)
-    fev_ξ = CellScalarValues(quad_rule, function_space)
+    fev_ξγ = CellScalarValues(quad_rule, function_space)
 
     # slip_boundary is created below
     mesh, dh = ViscoCrystalPlast.create_mesh_and_dofhandler(input_file, dim, nslips, probtype)
@@ -198,8 +194,11 @@ function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 
     mps = [setup_rand_BCC() for i in 1:length(unique(polys))]
 
     # Chose between dual and primal problem here
-    problem = ViscoCrystalPlast.DualProblem(nslips, bctype, V_poly, fev_u, fev_ξ)
-
+    if probtype == :dual
+        problem = ViscoCrystalPlast.DualProblem(nslips, bctype, V_poly, fev_u, fev_ξγ)
+    else
+        problem = ViscoCrystalPlast.PrimalProblem(nslips, fev_u, fev_ξγ)
+    end
     timestep_fine = 0
     n_elements = length(dh.grid.cells)
 
@@ -247,11 +246,11 @@ function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 
         end
     end
 
-    println("Running with n_grains $n_polys, xi_bc: $xi_bc_type, u_bc = $bctype")
+    println("Running with n_grains $n_polys, xi_bc: $bc, u_bc = $bctype, problem type = $(typeof(problem))")
     # Solve problem
     conv = true
     try
-    sol, σ_bar_n, mss = ViscoCrystalPlast.solve_problem(problem, mesh, dh, dbcs, fev_u, fev_ξ, mps, times,
+    sol, σ_bar_n, mss = ViscoCrystalPlast.solve_problem(problem, mesh, dh, dbcs, fev_u, fev_ξγ, mps, times,
                                                 exporter_fine, polys, ɛ_bar_f)
     catch e
         if !isa(e, ViscoCrystalPlast.IterationException)
@@ -278,17 +277,17 @@ function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 
         write(f, "Ω_grains", Ω_grains)
         #write(f, "dh", dbcs.dh)
         #write(f, "fev_u", fev_u)
-        #write(f, "fev_ξ", fev_ξ)
+        #write(f, "fev_ξγ", fev_ξγ)
         #write(f, "grid", dbcs.grid)
         write(f, "input_file", readstring(@__FILE__))
         close(f)
     end
 
     t = (bctype == ViscoCrystalPlast.Neumann ? "N" : "D")
-    t2 = (xi_bc_type == :microhard ? "MH" : "MF")
+    t2 = (bc == :microhard ? "MH" : "MF")
 
     print_timer(title = "N = $n_polys id = $run_id bc = $t2 u_bc = $t")
     return
 end
 
-runit(joinpath(@__DIR__, "meshes", "n1-id1.inp"))
+runit(joinpath(@__DIR__, "meshes", "n5-id1.inp"); probtype=:dual, bc=:microhard)

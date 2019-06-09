@@ -39,6 +39,9 @@ end
 
 get_type{dim, T, M}(::Type{CrystPlastDualQD{dim, T, M}}) = CrystPlastDualQD
 
+# Add some arithmetic on quadrature data.
+# TODO: Should really be made cleaner
+
 function Base.:*(n::Number, qd::CrystPlastDualQD)
     CrystPlastDualQD(n * qd.σ, n * qd.ε, n * qd.ε_p, n * qd.τ_di, n * qd.τ, n * qd.γ, n * qd.χ⟂, n * qd.χo,
                      n * qd.ψek, n * qd.ψgk, n * qd.ψe, n * qd.ψg, n * qd.χ_π, n * qd.ϕ_π , n * qd.τ_π, n * qd.π)
