@@ -131,7 +131,7 @@ function integrate_grains(f, mesh, cellvalues, polys)
 end
 
 # Run the actual simulation
-function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 0; do_vtk = false, xi_bc_type = :microhard)
+function runit(input_file::String, bctype = ViscoCrystalPlast.Neumann, run_id = 0; do_vtk = true, xi_bc_type = :microhard)
     reset_timer!()
     dim = 3
     # Can fix the seed if we want reproducability

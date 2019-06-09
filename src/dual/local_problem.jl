@@ -155,6 +155,7 @@ function newton_solve!(out, problem, ∆t, mp, ms, temp_ms)
             break
         end
 
+        # problem.J \ problem.R
         A_ldiv_B!(lufact!(Array(problem.J)), Array(problem.R))
         @inbounds for i in eachindex(Array(problem.inner))
             problem.inner[i] -= problem.R[i]

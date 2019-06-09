@@ -67,13 +67,10 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                                        mesh, dofhandler, dbcs, mps, mss, temp_mss, dt, polys)
             end
 
-
-
             U_conv = norm(f[free], Inf) <= 1e-8
             C_conv = norm(C, Inf) < 1e-6
             full_residuals[free] = f[free]
             print_residuals(io, dofhandler, full_residuals)
-
 
             conv = false
             c_case = 0
@@ -145,8 +142,6 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
                   #pardiso(ps, K_pardiso, ff)
                   #set_phase!(ps, Pardiso.SOLVE_ITERATIVE_REFINE)
                   #∆∆u  = similar(ff) # Solution is stored in X
-                  @show size(K)
-                  @show size(KK)
                   ∆∆u = KK \ ff
                   #pardiso(ps, ∆∆u , K_pardiso, ff)
             end
@@ -168,12 +163,12 @@ function solve_problem{dim}(problem::AbstractProblem, mesh::Grid, dofhandler::Do
 
         # temp_mss is now the true matstats
         mss, temp_mss = temp_mss, mss
+
+        # Run the passed in exporter function
         exporter(t, u, mss)
     end
     return u, σ_bar_n, mss
 end
-
-# using Calculus
 
 function assemble!{dim}(problem, K::SparseMatrixCSC, u::Vector, un::Vector, ɛ_bar, σ_bar,
                         fev_u::CellVectorValues{dim}, fev_ξ::CellScalarValues{dim}, mesh::Grid, dofhandler::DofHandler,
